@@ -1591,6 +1591,525 @@ window.showLegacyTool = function (tabId) {
   }
 };
 
+/* 学习实验室的模型层。
+
+基准来自内嵌的仿真分位表（HFDATA.orcPct，131 行，温度 100~360℃），
+单位是「每 MW 回收热的净功率 kW」。可学习的部分是叠加在上面的一个偏置修正。
+
+注意：基准 P50 在 198~260℃ 区间本身并不单调（有 16 处逆序），
+这是数据的事实，因此"单调性"门控只能定义为"更新不得让它变得更差"，
+不能定义为"必须单调"。
+*/
+window.WHLAB_MODEL = (function () {
+  var DOMAIN = { min: 100, max: 350 };
+  var SINK_C = 25;
+
+  function table() {
+    return (window.HFDATA && window.HFDATA.orcPct) || [];
+  }
+
+  function baseline(t) {
+    var rows = table();
+    if (!rows.length) { return null; }
+    var first = rows[0];
+    var last = rows[rows.length - 1];
+    if (t <= first[0]) { return first[2]; }
+    if (t >= last[0]) { return last[2]; }
+    for (var i = 0; i < rows.length - 1; i++) {
+      var a = rows[i];
+      var b = rows[i + 1];
+      if (t >= a[0] && t <= b[0]) {
+        var span = b[0] - a[0];
+        var w = span > 0 ? (t - a[0]) / span : 0;
+        return a[2] * (1 - w) + b[2] * w;
+      }
+    }
+    return last[2];
+  }
+
+  function biasOf(state) {
+    return (state && typeof state.bias === "number") ? state.bias : 0;
+  }
+
+  function predict(t, state) {
+    var base = baseline(t);
+    return base === null ? null : base * (1 + biasOf(state));
+  }
+
+  /* 热效率（比例）：净功率 kW / 回收热 kW */
+  function efficiency(t, state) {
+    var p = predict(t, state);
+    return p === null ? null : p / 1000;
+  }
+
+  /* 卡诺上限，冷源按 25℃ */
+  function carnot(t) {
+    var th = t + 273.15;
+    var tc = SINK_C + 273.15;
+    return th <= tc ? 0 : 1 - tc / th;
+  }
+
+  function grid(step) {
+    var out = [];
+    var s = step || 10;
+    for (var t = DOMAIN.min; t <= DOMAIN.max + 1e-9; t += s) {
+      out.push(Math.round(t));
+    }
+    return out;
+  }
+
+  /* 适用域内的单调性逆序数 */
+  function monotonicityViolations(state) {
+    var rows = table();
+    var count = 0;
+    for (var i = 0; i < rows.length - 1; i++) {
+      if (rows[i][0] < DOMAIN.min || rows[i + 1][0] > DOMAIN.max) { continue; }
+      var p1 = predict(rows[i][0], state);
+      var p2 = predict(rows[i + 1][0], state);
+      if (p1 !== null && p2 !== null && p1 > p2 + 1e-9) { count++; }
+    }
+    return count;
+  }
+
+  function calibrationSet() {
+    return (window.HFDATA && window.HFDATA.real14) || [];
+  }
+
+  /* 在 14 个实测留出点上的平均绝对百分比误差 */
+  function calibrationError(state) {
+    var rows = calibrationSet();
+    if (!rows.length) { return null; }
+    var sum = 0;
+    var n = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var observed = rows[i][1];
+      var p = predict(rows[i][0], state);
+      if (p === null || !observed) { continue; }
+      sum += Math.abs(p - observed) / Math.abs(observed);
+      n++;
+    }
+    return n ? sum / n : null;
+  }
+
+  return {
+    DOMAIN: DOMAIN,
+    SINK_C: SINK_C,
+    baseline: baseline,
+    predict: predict,
+    efficiency: efficiency,
+    carnot: carnot,
+    grid: grid,
+    monotonicityViolations: monotonicityViolations,
+    calibrationSetSize: function () { return calibrationSet().length; },
+    calibrationError: calibrationError
+  };
+})();
+
+/* 五道门控：全部通过才允许更新模型。
+
+设计意图：这不是"防呆"，而是**用外部物理证据给在线更新当守门人**。
+所有门控都是纯函数，便于单独测试。
+*/
+window.WHLAB_GATES = (function () {
+  var M = window.WHLAB_MODEL;
+
+  function scan(state, fn) {
+    var pts = M.grid(10);
+    var best = null;
+    for (var i = 0; i < pts.length; i++) {
+      var v = fn(pts[i]);
+      if (v === null) { continue; }
+      if (best === null || v.value > best.value) {
+        best = { value: v.value, at: pts[i] };
+      }
+    }
+    return best;
+  }
+
+  /* G1 物理上限：任何温度点上，热效率不得超过卡诺效率的 90% */
+  function g1(state) {
+    var worst = scan(state, function (t) {
+      var eta = M.efficiency(t, state);
+      var c = M.carnot(t);
+      return c > 0 ? { value: eta / c } : null;
+    });
+    if (!worst) {
+      return { id: "G1", name: "物理上限", pass: false, detail: "无法计算" };
+    }
+    return {
+      id: "G1", name: "物理上限",
+      pass: worst.value <= 0.9,
+      detail: "最高达卡诺效率的 " + (worst.value * 100).toFixed(1) +
+              "%（阈值 90%，出现在 " + worst.at + " ℃）"
+    };
+  }
+
+  /* G2 能量守恒：净功率不得超过回收热量 */
+  function g2(state) {
+    var worst = scan(state, function (t) {
+      var eta = M.efficiency(t, state);
+      return eta === null ? null : { value: eta };
+    });
+    if (!worst) {
+      return { id: "G2", name: "能量守恒", pass: false, detail: "无法计算" };
+    }
+    return {
+      id: "G2", name: "能量守恒",
+      pass: worst.value <= 1,
+      detail: "最高热效率 " + (worst.value * 100).toFixed(2) +
+              "%（上限 100%，出现在 " + worst.at + " ℃）"
+    };
+  }
+
+  /* G3 单调性不恶化：基准本身有逆序，故只要求更新后不增加 */
+  function g3(state, prev) {
+    var now = M.monotonicityViolations(state);
+    var before = prev ? M.monotonicityViolations(prev) : now;
+    return {
+      id: "G3", name: "单调性不恶化",
+      pass: now <= before,
+      detail: "逆序 " + before + " 处 → " + now + " 处（基准本身有 " +
+              M.monotonicityViolations(null) + " 处，属数据既有事实）"
+    };
+  }
+
+  /* G4 适用域：新数据点必须落在标定区间内 */
+  function g4(state, prev, point) {
+    var t = point && point.t;
+    var ok = typeof t === "number" && t >= M.DOMAIN.min && t <= M.DOMAIN.max;
+    return {
+      id: "G4", name: "适用域",
+      pass: ok,
+      detail: ok
+        ? "注入点 " + t + " ℃ 在标定区间 " + M.DOMAIN.min + "~" +
+          M.DOMAIN.max + " ℃ 内"
+        : "注入点 " + t + " ℃ 超出标定区间 " + M.DOMAIN.min + "~" +
+          M.DOMAIN.max + " ℃"
+    };
+  }
+
+  /* G5 校准不恶化：留出实测点上的误差不得变差超过 5% */
+  function g5(state, prev) {
+    var now = M.calibrationError(state);
+    var before = prev ? M.calibrationError(prev) : now;
+    if (now === null || before === null || before === 0) {
+      return { id: "G5", name: "校准不恶化", pass: false,
+               detail: "缺少留出校准集，无法判定" };
+    }
+    var ratio = now / before;
+    var delta = (ratio >= 1 ? "+" : "") + ((ratio - 1) * 100).toFixed(2);
+    return {
+      id: "G5", name: "校准不恶化",
+      pass: ratio <= 1.05,
+      detail: "留出 " + M.calibrationSetSize() + " 个实测点平均误差 " +
+              (before * 100).toFixed(2) + "% → " + (now * 100).toFixed(2) +
+              "%（容许变差 5%，实际 " + delta + "%）"
+    };
+  }
+
+  /* 依次跑五道门控，返回全部结果与总判定 */
+  function run(state, prev, point) {
+    var results = [g1(state), g2(state), g3(state, prev), g4(state, prev, point),
+                   g5(state, prev)];
+    var failed = [];
+    for (var i = 0; i < results.length; i++) {
+      if (!results[i].pass) { failed.push(results[i].id); }
+    }
+    return { results: results, passed: failed.length === 0, failed: failed };
+  }
+
+  return { run: run, g1: g1, g2: g2, g3: g3, g4: g4, g5: g5 };
+})();
+
+/* 学习实验室的持久化层。
+
+存在浏览器本地（IndexedDB），**不上传、不跨用户、不跨设备**。
+隐私模式或 IDB 不可用时自动退回内存存储，此时刷新即丢失——
+页面会如实提示，不会假装还在。
+*/
+window.WHLAB_STORE = (function () {
+  var DB_NAME = "whlab";
+  var DB_VERSION = 1;
+  var STORES = ["state", "events", "snapshots"];
+  var memory = { state: [], events: [], snapshots: [] };
+  var dbPromise = null;
+  var usingMemory = false;
+
+  function openDB() {
+    if (dbPromise) { return dbPromise; }
+    dbPromise = new Promise(function (resolve) {
+      var req;
+      try {
+        req = window.indexedDB.open(DB_NAME, DB_VERSION);
+      } catch (err) {
+        usingMemory = true;
+        resolve(null);
+        return;
+      }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        STORES.forEach(function (name) {
+          if (!db.objectStoreNames.contains(name)) {
+            db.createObjectStore(name, { keyPath: "key" });
+          }
+        });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { usingMemory = true; resolve(null); };
+    });
+    return dbPromise;
+  }
+
+  function put(store, key, value) {
+    return openDB().then(function (db) {
+      if (!db) {
+        memory[store] = memory[store].filter(function (r) { return r.key !== key; });
+        memory[store].push({ key: key, value: value });
+        return true;
+      }
+      return new Promise(function (resolve) {
+        var tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).put({ key: key, value: value });
+        tx.oncomplete = function () { resolve(true); };
+        tx.onerror = function () { resolve(false); };
+      });
+    });
+  }
+
+  function get(store, key) {
+    return openDB().then(function (db) {
+      if (!db) {
+        var hit = memory[store].filter(function (r) { return r.key === key; })[0];
+        return hit ? hit.value : null;
+      }
+      return new Promise(function (resolve) {
+        var tx = db.transaction(store, "readonly");
+        var req = tx.objectStore(store).get(key);
+        req.onsuccess = function () { resolve(req.result ? req.result.value : null); };
+        req.onerror = function () { resolve(null); };
+      });
+    });
+  }
+
+  function all(store) {
+    return openDB().then(function (db) {
+      if (!db) {
+        return memory[store].map(function (r) { return r.value; });
+      }
+      return new Promise(function (resolve) {
+        var tx = db.transaction(store, "readonly");
+        var req = tx.objectStore(store).getAll();
+        req.onsuccess = function () {
+          resolve((req.result || []).map(function (r) { return r.value; }));
+        };
+        req.onerror = function () { resolve([]); };
+      });
+    });
+  }
+
+  function clear(store) {
+    return openDB().then(function (db) {
+      if (!db) { memory[store] = []; return true; }
+      return new Promise(function (resolve) {
+        var tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).clear();
+        tx.oncomplete = function () { resolve(true); };
+        tx.onerror = function () { resolve(false); };
+      });
+    });
+  }
+
+  return {
+    get: get,
+    put: put,
+    all: all,
+    clear: clear,
+    isMemoryOnly: function () { return usingMemory; }
+  };
+})();
+
+/* 自主学习实验室的编排层：版本、提交、门控、回滚。
+
+对外口径（务必与页面提示一致）：
+  - 这是"受限自主更新"：模型能在运行中更新，但必须过五道门控，且可回滚；
+  - 学习状态只存在本浏览器；交付版不含此功能，行为固定在提交时的状态；
+  - 每条计算结果都应带上产生它的模型版本号。
+*/
+window.WHLAB = (function () {
+  var M = window.WHLAB_MODEL;
+  var G = window.WHLAB_GATES;
+  var S = window.WHLAB_STORE;
+  var MAX_SNAPSHOTS = 10;
+
+  var BASE = { version: "1.0.0", bias: 0, samples: 0, updatedAt: null,
+               note: "交付基线（未经过在线更新）" };
+
+  var state = null;
+  var events = [];
+  var ready = false;
+  var listeners = [];
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  function bumpVersion(version) {
+    var parts = String(version).split(".");
+    var patch = parseInt(parts[2] || "0", 10) + 1;
+    return parts[0] + "." + parts[1] + "." + patch;
+  }
+
+  function notify() {
+    listeners.forEach(function (fn) { try { fn(); } catch (e) {} });
+  }
+
+  function init() {
+    if (ready) { return Promise.resolve(state); }
+    return S.get("state", "current").then(function (saved) {
+      state = saved ? clone(saved) : clone(BASE);
+      /* 事件与快照都以"单个 key 存整个列表"的方式落盘，
+         所以要用 get 读回，不能用 all（all 返回的是记录数组，会多一层嵌套）。 */
+      return S.get("events", "list");
+    }).then(function (rows) {
+      events = Array.isArray(rows) ? rows : [];
+      events.sort(function (a, b) { return a.seq - b.seq; });
+      ready = true;
+      return state;
+    });
+  }
+
+  function snapshot(reason) {
+    return S.get("snapshots", "list").then(function (rows) {
+      var list = Array.isArray(rows) ? rows.slice() : [];
+      list.sort(function (a, b) { return a.seq - b.seq; });
+      list.push({ key: String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8),
+                  seq: Date.now(), state: clone(state), reason: reason });
+      while (list.length > MAX_SNAPSHOTS) { list.shift(); }
+      return S.put("snapshots", "list", list);
+    });
+  }
+
+  function logEvent(ev) {
+    ev.seq = events.length ? events[events.length - 1].seq + 1 : 1;
+    ev.ts = new Date().toISOString();
+    events.push(ev);
+    return S.put("events", "list", events);
+  }
+
+  /* 提交一个数据点。observed 单位与基准一致：每 MW 回收热的净功率 kW */
+  function submit(input) {
+    return init().then(function () {
+      var t = Number(input.t);
+      var observed = Number(input.observed);
+      if (!isFinite(t) || !isFinite(observed) || observed <= 0) {
+        return { accepted: false, reason: "输入不合法：温度和实测值都必须是正数",
+                 gates: [] };
+      }
+      var prev = clone(state);
+      var predicted = M.predict(t, prev);
+      var residual = predicted ? (observed / predicted - 1) : 0;
+      var samples = (prev.samples || 0) + 1;
+      var candidate = clone(prev);
+      candidate.bias = ((prev.bias || 0) * (prev.samples || 0) + residual) / samples;
+      candidate.samples = samples;
+
+      var verdict = G.run(candidate, prev, { t: t, observed: observed });
+
+      if (!verdict.passed) {
+        return logEvent({
+          type: "reject", point: { t: t, observed: observed,
+                                   note: input.note || "", source: input.source || "" },
+          predicted: predicted, residual: residual,
+          from: prev.version, to: prev.version,
+          gates: verdict.results, failed: verdict.failed,
+          reason: "门控未通过：" + verdict.failed.join("、")
+        }).then(function () {
+          notify();
+          return { accepted: false, gates: verdict.results,
+                   failed: verdict.failed, state: clone(state),
+                   reason: "门控未通过：" + verdict.failed.join("、") };
+        });
+      }
+
+      return snapshot("更新前").then(function () {
+        var next = clone(candidate);
+        next.version = bumpVersion(prev.version);
+        next.updatedAt = new Date().toISOString();
+        next.note = "在线更新 " + next.samples + " 次";
+        state = next;
+        return S.put("state", "current", state);
+      }).then(function () {
+        return logEvent({
+          type: "accept",
+          point: { t: t, observed: observed, note: input.note || "",
+                   source: input.source || "" },
+          predicted: predicted, residual: residual,
+          from: prev.version, to: state.version,
+          biasFrom: prev.bias, biasTo: state.bias,
+          gates: verdict.results, failed: [],
+          reason: "五道门控全部通过"
+        });
+      }).then(function () {
+        notify();
+        return { accepted: true, gates: verdict.results, state: clone(state),
+                 reason: "已更新到 " + state.version };
+      });
+    });
+  }
+
+  function rollback(version) {
+    return init().then(function () {
+      return S.get("snapshots", "list");
+    }).then(function (rows) {
+      var list = Array.isArray(rows) ? rows.slice() : [];
+      list.sort(function (a, b) { return a.seq - b.seq; });
+      var target = null;
+      for (var i = list.length - 1; i >= 0; i--) {
+        if (list[i].state.version === version) { target = list[i]; break; }
+      }
+      if (!target) { return { ok: false, reason: "没有该版本的快照" }; }
+      var from = state.version;
+      state = clone(target.state);
+      return S.put("state", "current", state).then(function () {
+        return logEvent({ type: "rollback", from: from, to: state.version,
+                          reason: "手动回滚" });
+      }).then(function () {
+        notify();
+        return { ok: true, state: clone(state) };
+      });
+    });
+  }
+
+  function reset() {
+    return init().then(function () {
+      var from = state.version;
+      return snapshot("重置前");
+    }).then(function () {
+      state = clone(BASE);
+      return S.put("state", "current", state);
+    }).then(function () {
+      return logEvent({ type: "reset", from: null, to: state.version,
+                        reason: "回到交付基线" });
+    }).then(function () {
+      notify();
+      return { ok: true, state: clone(state) };
+    });
+  }
+
+  return {
+    init: init,
+    current: function () { return state ? clone(state) : clone(BASE); },
+    events: function () { return events.slice(); },
+    base: function () { return clone(BASE); },
+    submit: submit,
+    rollback: rollback,
+    reset: reset,
+    snapshots: function () { return S.get("snapshots", "list").then(function (rows) {
+      return Array.isArray(rows) ? rows : [];
+    }); },
+    onChange: function (fn) { listeners.push(fn); },
+    memoryOnly: function () { return S.isMemoryOnly(); }
+  };
+})();
+
 window.VIEWS = window.VIEWS || {};
 
 window.VIEWS.placeholder = function (content) {
@@ -1603,14 +2122,15 @@ window.VIEWS = window.VIEWS || {};
 window.VIEWS.evidence = function (content) {
   var items = content.evidence.items || [];
   var head = '<h2>外部证据</h2>' +
-    '<p class="muted small">路演之后分四轮检索得到的外部数据与标准。' +
-    '每条都标注了适用边界——这是为了防止这些数据被误用。</p>';
+    '<p class="muted small">路演之后分四轮检索得到的外部数据与标准，共 ' +
+    items.length + ' 条。' +
+    '<strong>每条都标注了适用边界</strong>——这是为了防止这些数据被误用。</p>';
 
   if (!items.length) {
     return '<section class="card">' + head + '<p class="muted">暂无条目</p></section>';
   }
 
-  var cards = items.map(function (item) {
+  function cardHtml(item) {
     var html = '<div class="card">';
     html += '<h3>' + window.esc(item.title) + '</h3>';
     html += '<span class="stat" style="display:block;border:none;padding:0">' +
@@ -1623,10 +2143,25 @@ window.VIEWS.evidence = function (content) {
             window.esc(item.caveat) + '</p>';
     html += '</div>';
     return html;
+  }
+
+  // 按类别分组，保持 category 在 items 里首次出现的顺序
+  var order = [];
+  var groups = {};
+  items.forEach(function (item) {
+    var key = item.category || "其他";
+    if (!groups[key]) { groups[key] = []; order.push(key); }
+    groups[key].push(item);
+  });
+
+  var sections = order.map(function (key) {
+    var cards = groups[key].map(cardHtml).join('');
+    return '<h3 class="group-title">' + window.esc(key) +
+           '<span class="muted small"> · ' + groups[key].length + ' 条</span></h3>' +
+           '<div class="grid">' + cards + '</div>';
   }).join('');
 
-  return '<section class="card">' + head + '</section>' +
-         '<div class="grid">' + cards + '</div>';
+  return '<section class="card">' + head + '</section>' + sections;
 };
 
 window.VIEWS = window.VIEWS || {};
@@ -1729,6 +2264,228 @@ window.VIEWS.changelog = function (content) {
 
 window.VIEWS = window.VIEWS || {};
 
+/* 界面骨架。动态部分在 VIEW_AFTER.learning 里填充与绑定。 */
+window.VIEWS.learning = function (content) {
+  var M = window.WHLAB_MODEL;
+  return '' +
+  '<section class="card">' +
+    '<h2>自主学习实验室</h2>' +
+    '<div class="note warn">' +
+      '<strong>这是实验功能，请连同下面三句话一起理解：</strong>' +
+      '<ol class="small" style="margin:6px 0 0 18px">' +
+        '<li>学习到的状态<strong>只存在于你这一台浏览器</strong>' +
+          '（IndexedDB），不上传、不跨用户、不跨设备。</li>' +
+        '<li><strong>交付版不含本功能</strong>，交付版行为固定在提交时的状态：' +
+          '同一输入必然得到同一输出。</li>' +
+        '<li>本页里"同一输入可能给出不同答案"是<strong>故意的</strong>，' +
+          '所以每条结果都必须带模型版本号。</li>' +
+      '</ol>' +
+    '</div>' +
+    '<p class="small muted">这是"受限自主更新"（guarded continual learning）：' +
+    '模型可以在运行中更新，但必须通过五道门控，且随时可回滚。' +
+    '它不等于"模型会自己学习"——训练仍由人触发，每一项更新都留档。</p>' +
+  '</section>' +
+
+  '<section class="card">' +
+    '<h3>当前模型状态</h3>' +
+    '<div class="grid" id="lab-state"></div>' +
+    '<div class="kv" id="lab-storage" style="margin-top:8px"></div>' +
+  '</section>' +
+
+  '<section class="card">' +
+    '<h3>五道门控</h3>' +
+    '<div id="lab-gates"></div>' +
+  '</section>' +
+
+  '<section class="card">' +
+    '<h3>提交一个数据点</h3>' +
+    '<p class="small muted">单位与基准一致：每 MW 回收热的净功率（kW）。' +
+    '标定区间 ' + M.DOMAIN.min + '~' + M.DOMAIN.max + ' ℃。</p>' +
+    '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">' +
+      '<div class="field"><label>热源温度（℃）</label>' +
+        '<input id="lab-t" type="number" min="0" max="900" step="1" value="200"></div>' +
+      '<div class="field"><label>实测净功率（kW/MW热）</label>' +
+        '<input id="lab-v" type="number" min="0" step="0.1" value="120"></div>' +
+      '<div class="field"><label>备注</label>' +
+        '<input id="lab-note" type="text" placeholder="例如：某厂实测" value=""></div>' +
+    '</div>' +
+    '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn" id="lab-submit">提交并过门控</button>' +
+      '<button class="btn ghost" id="lab-demo-ok">填入一个合理点</button>' +
+      '<button class="btn ghost" id="lab-demo-bad">填入一个物理上不可能的点</button>' +
+    '</div>' +
+    '<div id="lab-result" style="margin-top:12px"></div>' +
+  '</section>' +
+
+  '<section class="card">' +
+    '<h3>事件记录</h3>' +
+    '<p class="small muted">每一次接受、拒绝、回滚、重置都留档。' +
+    '被拒绝的更新同样记录——它本身就是"门控在起作用"的证据。</p>' +
+    '<div id="lab-events"></div>' +
+    '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn ghost" id="lab-reset">回到交付基线</button>' +
+    '</div>' +
+  '</section>';
+};
+
+window.VIEW_AFTER = window.VIEW_AFTER || {};
+
+window.VIEW_AFTER.learning = function () {
+  var M = window.WHLAB_MODEL;
+  var L = window.WHLAB;
+
+  function el(id) { return document.getElementById(id); }
+
+  function statCard(value, label) {
+    return '<div class="stat"><span class="value">' + window.esc(value) +
+           '</span><span class="label">' + window.esc(label) + '</span></div>';
+  }
+
+  function renderState() {
+    var s = L.current();
+    el("lab-state").innerHTML =
+      statCard("v" + s.version, "模型版本") +
+      statCard((s.bias >= 0 ? "+" : "") + (s.bias * 100).toFixed(2) + "%",
+               "效率偏置修正") +
+      statCard(String(s.samples), "已吸收的实测点") +
+      statCard(s.updatedAt ? s.updatedAt.slice(0, 19).replace("T", " ") : "—",
+               "最近更新");
+    el("lab-storage").innerHTML =
+      '<span>存储：' + (L.memoryOnly()
+        ? '<span class="chip red">仅内存（刷新即丢失）</span>'
+        : '<span class="chip">本浏览器 IndexedDB</span>') + '</span>' +
+      '<span>基准：内嵌仿真分位表 P50（131 行，100~360 ℃）</span>' +
+      '<span>留出校准集：' + M.calibrationSetSize() + ' 个实测点</span>';
+    var baseErr = M.calibrationError(null);
+    if (baseErr !== null) {
+      el("lab-storage").innerHTML +=
+        '<span>基准对留出实测点的平均误差：<strong>' +
+        (baseErr * 100).toFixed(2) + '%</strong>（基准系统性偏低，' +
+        '所以正向偏置通常能改善校准）</span>';
+    }
+  }
+
+  function renderGates() {
+    var s = L.current();
+    var prev = { version: s.version, bias: 0, samples: 0 };
+    var verdict = window.WHLAB_GATES.run(s, prev, { t: 200 });
+    var rows = verdict.results.map(function (g) {
+      var chip = g.pass ? '<span class="chip">通过</span>'
+                        : '<span class="chip red">未通过</span>';
+      return '<tr><td>' + window.esc(g.id) + '</td><td>' + window.esc(g.name) +
+             '</td><td>' + chip + '</td><td class="small">' +
+             window.esc(g.detail) + '</td></tr>';
+    }).join('');
+    var base = M.monotonicityViolations(null);
+    el("lab-gates").innerHTML =
+      '<table><thead><tr><th>编号</th><th>门控</th><th>当前状态</th><th>判据</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<p class="small muted" style="margin-top:8px">' +
+      '注：基准分位表在 ' + M.DOMAIN.min + '~' + M.DOMAIN.max +
+      ' ℃ 区间内本身存在 <strong>' + base + ' 处效率逆序</strong>' +
+      '（P50 随温度升高反而略降，集中在 198~260 ℃）。这是数据既有事实，' +
+      '因此 G3 的口径是"更新不得让它变得更坏"，而不是"必须单调"。</p>';
+  }
+
+  function renderEvents() {
+    var evs = L.events().slice().reverse();
+    if (!evs.length) {
+      el("lab-events").innerHTML = '<p class="muted small">暂无记录。</p>';
+      return;
+    }
+    var rows = evs.map(function (e) {
+      var badge = { accept: '<span class="chip">接受</span>',
+                    reject: '<span class="chip red">拒绝</span>',
+                    rollback: '<span class="chip gold">回滚</span>',
+                    reset: '<span class="chip grey">重置</span>' }[e.type] || '';
+      var point = e.point
+        ? '注入 ' + e.point.t + ' ℃ / ' + e.point.observed + ' kW' +
+          (e.point.note ? '（' + e.point.note + '）' : '')
+        : '';
+      var ver = e.from && e.to ? e.from + ' → ' + e.to : (e.to || '');
+      var extra = e.type === "accept" && typeof e.residual === "number"
+        ? '残差 ' + (e.residual * 100).toFixed(2) + '%'
+        : (e.failed && e.failed.length ? '未过：' + e.failed.join('、') : e.reason);
+      /* 每条"接受"事件都提供回到更新前版本的入口（那时已存过快照） */
+      var roll = (e.type === "accept" && e.from)
+        ? '<button class="btn ghost small" data-rollback="' + window.esc(e.from) +
+          '" style="margin-left:6px">回滚到 ' + window.esc(e.from) + '</button>'
+        : '';
+      return '<tr><td class="small">' + window.esc(e.ts.slice(0, 19).replace("T", " ")) +
+             '</td><td>' + badge + '</td><td class="small">' + window.esc(ver) +
+             '</td><td class="small">' + window.esc(point) + '</td><td class="small">' +
+             window.esc(extra) + roll + '</td></tr>';
+    }).join('');
+    el("lab-events").innerHTML =
+      '<table><thead><tr><th>时间</th><th>类型</th><th>版本</th>' +
+      '<th>数据点</th><th>说明</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderAll() {
+    renderState();
+    renderGates();
+    renderEvents();
+  }
+
+  function showResult(html) { el("lab-result").innerHTML = html; }
+
+  el("lab-submit").addEventListener("click", function () {
+    var t = parseFloat(el("lab-t").value);
+    var v = parseFloat(el("lab-v").value);
+    showResult('<p class="muted small">正在过门控……</p>');
+    L.submit({ t: t, observed: v, note: el("lab-note").value,
+               source: "手动提交" }).then(function (r) {
+      var list = r.gates.map(function (g) {
+        return '<li>' + (g.pass ? '✓' : '✗') + ' <strong>' + window.esc(g.id) +
+               ' ' + window.esc(g.name) + '</strong>：' + window.esc(g.detail) + '</li>';
+      }).join('');
+      var head = r.accepted
+        ? '<div class="note"><strong>更新已生效</strong>，模型版本 ' +
+          window.esc(r.state.version) + '，效率偏置 ' +
+          (r.state.bias * 100).toFixed(2) + '%。</div>'
+        : '<div class="note warn"><strong>更新被拒绝</strong>：' +
+          window.esc(r.reason) + '。模型版本保持 ' +
+          window.esc(r.state.version) + ' 不变。</div>';
+      showResult(head + '<ul class="small" style="margin:6px 0 0 18px">' + list + '</ul>');
+      renderAll();
+    });
+  });
+
+  el("lab-demo-ok").addEventListener("click", function () {
+    var s = L.current();
+    var t = 250;
+    var base = M.predict(t, s);
+    el("lab-t").value = t;
+    el("lab-v").value = (base * 1.02).toFixed(1);
+    el("lab-note").value = "合理点示例（比模型高 2%）";
+  });
+
+  el("lab-demo-bad").addEventListener("click", function () {
+    el("lab-t").value = 250;
+    el("lab-v").value = "900";
+    el("lab-note").value = "物理上不可能（远超卡诺上限）";
+  });
+
+  el("lab-reset").addEventListener("click", function () {
+    L.reset().then(function () { renderAll(); showResult(""); });
+  });
+
+  el("lab-events").addEventListener("click", function (ev) {
+    var v = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-rollback");
+    if (!v) { return; }
+    L.rollback(v).then(function (r) {
+      renderAll();
+      showResult(r.ok
+        ? '<div class="note">已回滚到 ' + window.esc(r.state.version) + '。</div>'
+        : '<div class="note warn">' + window.esc(r.reason) + '</div>');
+    });
+  });
+
+  L.init().then(renderAll);
+};
+
+window.VIEWS = window.VIEWS || {};
+
 function renderTabs() {
   var nav = document.getElementById('tabs');
   var tabs = window.__CONTENT__.tabs;
@@ -1758,6 +2515,8 @@ window.renderTab = function (tabId) {
     viewHost.hidden = false;
     var view = window.VIEWS[tabId] || window.VIEWS.placeholder;
     viewHost.innerHTML = view(content);
+    var after = window.VIEW_AFTER && window.VIEW_AFTER[tabId];
+    if (typeof after === 'function') { after(); }
   }
 
   var buttons = document.querySelectorAll('.tab');

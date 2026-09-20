@@ -93,6 +93,36 @@ th{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap}
 .chip.red{border-color:#F0C9C9;background:#FBEDED;color:var(--red)}
 .chip.grey{border-color:var(--line);background:#F3F6F9;color:var(--muted)}
 
+.group-title{
+  margin:24px 0 10px;padding-left:10px;
+  border-left:3px solid var(--accent);font-size:16px;
+}
+.group-title .muted{font-weight:400}
+
+.field{margin:0 0 10px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.field input,.field select{
+  width:100%;padding:7px 10px;font-family:inherit;font-size:14px;
+  color:var(--ink);background:var(--card);
+  border:1px solid var(--line);border-radius:8px;
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+
+.btn{
+  padding:8px 16px;border-radius:8px;cursor:pointer;
+  font-family:inherit;font-size:14px;font-weight:600;
+  color:#fff;background:var(--accent);border:1px solid var(--accent);
+}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{color:var(--ink);background:var(--card);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn.small{padding:3px 10px;font-size:12px;font-weight:400}
+
+.note.warn{
+  border-left-color:var(--red);background:#FBEDED;color:#8A2E2E;
+}
+.note ol{padding-left:18px}
+
 .kv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted)}
 .note{
   border-left:3px solid var(--gold);background:#FBF6EC;
