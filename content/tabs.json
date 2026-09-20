@@ -10,6 +10,6 @@
     {"id": "calibration", "title": "校准工作台", "kind": "content"},
     {"id": "boundaries", "title": "边界与口径", "kind": "content"},
     {"id": "changelog", "title": "演进记录", "kind": "content"},
-    {"id": "learning", "title": "自主学习实验室", "kind": "placeholder"}
+    {"id": "learning", "title": "自主学习实验室", "kind": "content"}
   ]
 }

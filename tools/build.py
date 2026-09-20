@@ -19,11 +19,16 @@ SCRIPT_FILES = [
     "legacy/hfdata.js",
     "legacy/ui.js",
     "legacy/adapter.js",
+    "learning/model.js",
+    "learning/gates.js",
+    "learning/store.js",
+    "learning/lab.js",
     "views/placeholder.js",
     "views/evidence.js",
     "views/calibration.js",
     "views/boundaries.js",
     "views/changelog.js",
+    "views/learning.js",
     "app.js",
 ]
 LEGACY_MARKUP = "legacy/tools.html"

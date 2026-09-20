@@ -29,6 +29,8 @@ window.renderTab = function (tabId) {
     viewHost.hidden = false;
     var view = window.VIEWS[tabId] || window.VIEWS.placeholder;
     viewHost.innerHTML = view(content);
+    var after = window.VIEW_AFTER && window.VIEW_AFTER[tabId];
+    if (typeof after === 'function') { after(); }
   }
 
   var buttons = document.querySelectorAll('.tab');
