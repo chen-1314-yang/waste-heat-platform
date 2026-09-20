@@ -30,7 +30,7 @@ def _minimal(tmp_path):
 def test_evidence_without_caveat_is_rejected(tmp_path):
     _minimal(tmp_path)
     _write(tmp_path, "evidence.json", {"items": [{
-        "id": "x", "title": "标题", "value": "1", "scope": "范围",
+        "id": "x", "category": "数据集", "title": "标题", "value": "1", "scope": "范围",
         "source": "出处", "caveat": ""}]})
     with pytest.raises(validate_content.ContentError) as excinfo:
         validate_content.load_and_validate(str(tmp_path))
@@ -51,7 +51,17 @@ def test_calibration_bad_decision_is_rejected(tmp_path):
 def test_valid_content_passes(tmp_path):
     _minimal(tmp_path)
     _write(tmp_path, "evidence.json", {"items": [{
-        "id": "x", "title": "标题", "value": "953 台", "scope": "范围",
+        "id": "x", "category": "数据集", "title": "标题", "value": "953 台", "scope": "范围",
         "source": "出处", "caveat": "无效率数据"}]})
     data = validate_content.load_and_validate(str(tmp_path))
     assert data["evidence"]["items"][0]["id"] == "x"
+
+
+def test_evidence_with_unknown_category_is_rejected(tmp_path):
+    _minimal(tmp_path)
+    _write(tmp_path, "evidence.json", {"items": [{
+        "id": "x", "category": "随便写的", "title": "标题", "value": "1",
+        "scope": "范围", "source": "出处", "caveat": "有边界"}]})
+    with pytest.raises(validate_content.ContentError) as excinfo:
+        validate_content.load_and_validate(str(tmp_path))
+    assert "category" in str(excinfo.value)

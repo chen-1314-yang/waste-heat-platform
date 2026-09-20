@@ -49,6 +49,12 @@
 .chip.red{border-color:#F0C9C9;background:#FBEDED;color:var(--red)}
 .chip.grey{border-color:var(--line);background:#F3F6F9;color:var(--muted)}
 
+.group-title{
+  margin:24px 0 10px;padding-left:10px;
+  border-left:3px solid var(--accent);font-size:16px;
+}
+.group-title .muted{font-weight:400}
+
 .kv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted)}
 .note{
   border-left:3px solid var(--gold);background:#FBF6EC;

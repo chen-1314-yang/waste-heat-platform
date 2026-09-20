@@ -37,3 +37,21 @@ def test_changelog_view_registered(tmp_path):
 def test_evidence_caveat_is_rendered(tmp_path):
     html = _single(tmp_path)
     assert "适用边界" in html, "证据条目必须把适用边界显示出来"
+
+
+def test_evidence_is_grouped_by_category(tmp_path):
+    html = _single(tmp_path)
+    assert "group-title" in html, "证据页应按类别分组"
+    for category in ("数据集", "标准规范", "实测案例", "造价口径", "模型与工具"):
+        assert category in html, f"缺少类别 {category}"
+
+
+def test_evidence_item_count_is_visible(tmp_path):
+    # "共 N 条" 是运行时拼的，静态产物里查不到字面串；
+    # 改为直接核对内容文件本身。
+    import json
+    with open(os.path.join(ROOT, "content", "evidence.json"),
+              encoding="utf-8") as handle:
+        items = json.load(handle)["items"]
+    assert len(items) == 16
+    assert all(item.get("caveat") for item in items), "每条都必须有适用边界"

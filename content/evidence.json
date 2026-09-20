@@ -2,6 +2,7 @@
   "items": [
     {
       "id": "orc-world-map",
+      "category": "数据集",
       "title": "全球 ORC 装机数据库",
       "value": "953 台 / 3512.7 MW",
       "scope": "工业余热回收 331 台；中国境内 31 台；水泥 12 台；冶金 33 台",
@@ -11,6 +12,7 @@
     },
     {
       "id": "eu28-waste-heat",
+      "category": "数据集",
       "title": "EU28 工业过程与余热数据（TNO）",
       "value": "267 行，含热量（TJ/a）与温度（℃）",
       "scope": "按工业产品/工艺分列，附余热侧两个物流",
@@ -20,6 +22,7 @@
     },
     {
       "id": "gb-standards",
+      "category": "标准规范",
       "title": "中国国家标准（余热相关）",
       "value": "10 项现行",
       "scope": "含 GB/T 37819-2019 低温余热双循环发电装置、GB/T 40286-2021 低温双循环余热回收利用装置性能测试方法",
@@ -29,12 +32,132 @@
     },
     {
       "id": "pypsa-orc-cost",
+      "category": "造价口径",
       "title": "PyPSA 技术造价库 · ORC",
       "value": "1376 EUR/kW_el；寿命 30 年；FOM 2%/年",
       "scope": "欧洲能源系统建模通用造价库",
       "source": "Tartiere & Astolfi 2017《A world overview of the organic Rankine cycle market》",
       "url": "https://github.com/PyPSA/technology-data",
       "caveat": "原文注明低装机量使估算不确定；为欧洲口径"
+    },
+    {
+      "id": "china-cost-anchors",
+      "category": "造价口径",
+      "title": "中国工程口径余热发电单位造价",
+      "value": "6,400 – 8,700 元/kW",
+      "scope": "水泥窑余热发电；含 6 MW 项目静态单位投资 8,718、2×9 MW 改造 6,391、浙江北部水泥行业 6,660",
+      "source": "水泥网 · 采招网中标公示 · 可研报告 · 环评报告",
+      "caveat": "均为蒸汽朗肯路径、6-9 MW 级；多为搜索摘要，正式引用前须核对原文"
+    },
+    {
+      "id": "heatscout-cases",
+      "category": "实测案例",
+      "title": "工业余热回收实测案例库（HeatScout）",
+      "value": "9 个案例，含实测经济性",
+      "scope": "Waupaca 铸铁厂（760→177℃、20,500 kW、回收期 2.4 年）；SIJ Metal Ravne 钢铁（450℃、9 个月）；宁波电镀厂（回收期 1.65 年）；瑞士造纸厂（LCOE 1.14 c/kWh）等",
+      "source": "GitHub cesabici-bit/heatscout 的 tests/validation_data/real_case_studies.json，逐条附出处链接",
+      "url": "https://github.com/cesabici-bit/heatscout",
+      "caveat": "行业跨度大、技术类型不完全一致；部分案例为换热器而非 ORC，不能直接套用到本模型"
+    },
+    {
+      "id": "expander-eff-maps",
+      "category": "模型与工具",
+      "title": "小型径流涡轮 ORC 性能图谱",
+      "value": "膨胀比 ε = 50 / 60 / 70 / 80 四档效率曲线",
+      "scope": "含预设计模型与凸包数据，可直接用于替换定值膨胀机效率",
+      "source": "Mendeley Data 10.17632/5swyj6vr9n、10.17632/yw4s626xxw",
+      "url": "https://data.mendeley.com/datasets/5swyj6vr9n",
+      "caveat": "试验台与模型结果，超出 ε=50~80 外推无效；为径流涡轮，不适用于螺杆/涡旋"
+    },
+    {
+      "id": "condenser-heat-transfer",
+      "category": "数据集",
+      "title": "板式换热器冷凝传热与压降实验数据",
+      "value": "R134a / R1234ze(E) / R245fa / R1233zd 四种工质",
+      "scope": "覆盖本项目两种核心工质（R245fa、R1233zd）",
+      "source": "Mendeley Data 10.17632/3p98gydw9s",
+      "url": "https://data.mendeley.com/datasets/3p98gydw9s",
+      "caveat": "部件级传热数据，不是整机性能；不能用来标定循环效率"
+    },
+    {
+      "id": "epfl-iea-orc-model",
+      "category": "模型与工具",
+      "title": "EPFL · IEA IETS 有机朗肯热经济模型",
+      "value": "34 kW 参考容量；甲苯工质；TRL 9",
+      "scope": "双级蒸发+双级膨胀+回热；含完整参数表与 xlsm 模型",
+      "source": "EPFL IPESE 研究组（IEA IETS Task XXIV · Subtask 1 · Activity 3.1）",
+      "url": "https://github.com/Bice1/ipese-project",
+      "caveat": "参考工况为甲苯，与我们的 R245fa / 蒸汽路径不同；属模型而非实测数据"
+    },
+    {
+      "id": "cieto-temperature-bands",
+      "category": "数据集",
+      "title": "工业技术温度区间表（CIETO）",
+      "value": "余热回收 90 – 1,000 ℃",
+      "scope": "含热泵 60-150、太阳能热 60-400、生物质 150-450 等对照区间",
+      "source": "美国 DOE《Waste Heat Recovery Technology Assessment》，经 CIETO 知识库整理",
+      "url": "https://github.com/cieto-dev/industrial-energy-optimizer",
+      "caveat": "该库自述工厂级数值为合成工程假设；只有行业/工艺特性与出处是被引用的"
+    },
+    {
+      "id": "china-orc-installations",
+      "category": "实测案例",
+      "title": "中国境内 ORC 机组清单",
+      "value": "31 台",
+      "scope": "宝钢 3,200 kW、徐州华宏特钢 7,445 kW、河南亚新钢铁 3,015 kW、中石化海南 1,300 kW、福建三钢闽光 275 kW 等，含厂商与投运年份",
+      "source": "全球 ORC 装机数据库，按国别筛选",
+      "url": "https://github.com/tartieret/ORC-World-Map-SPA",
+      "caveat": "只有容量与厂商，无热源温度与效率；不能用于验证热力学模型"
+    },
+    {
+      "id": "cement-metals-orc",
+      "category": "实测案例",
+      "title": "水泥与冶金余热 ORC 机组",
+      "value": "水泥与石灰窑 12 台 / 钢铁与冶金 33 台",
+      "scope": "水泥中位容量 2,000 kW（500–7,000）；冶金中位 1,000 kW（5–10,000）",
+      "source": "全球 ORC 装机数据库，按应用细分筛选",
+      "url": "https://github.com/tartieret/ORC-World-Map-SPA",
+      "caveat": "同一数据库的子集，同样缺少热源温度与效率字段"
+    },
+    {
+      "id": "epa-chp-database",
+      "category": "数据集",
+      "title": "美国热电联产机组数据库（EPA）",
+      "value": "工厂级机组清单",
+      "scope": "eGRID 静态表中的 chp_database.csv",
+      "source": "美国环保署 USEPA/egrid 公开数据集",
+      "url": "https://github.com/USEPA/egrid",
+      "caveat": "美国口径，与我国工业结构差异大；为机组清单而非运行实测"
+    },
+    {
+      "id": "orcnext-benchmark",
+      "category": "实测案例",
+      "title": "11 kWe ORC 余热回收台架（ORCNext）",
+      "value": "R245fa + 螺杆膨胀机（5,000 rpm）",
+      "scope": "公开稳态验证数据（论文 Table 5）；已有第三方复算基准",
+      "source": "GitHub karimialii/orc11kwe-benchmark，对标 ORCNext 项目",
+      "url": "https://github.com/karimialii/orc11kwe-benchmark",
+      "caveat": "原始数据在论文中，仓库只提供复算脚本与对标结果；台架工况窄"
+    },
+    {
+      "id": "r717-heatpump-field",
+      "category": "实测案例",
+      "title": "工业 R717 热泵现场运行数据",
+      "value": "13.5 bar / 18 bar 两组逐时记录",
+      "scope": "回收冷水机组余热的工业热泵，含传感器位置图与运行策略",
+      "source": "Zenodo 10.5281/zenodo.7627819",
+      "url": "https://zenodo.org/records/7627819",
+      "caveat": "热泵而非 ORC；可对照运行策略与部分负荷行为，不能标定 ORC 性能"
+    },
+    {
+      "id": "lab-orc-testbeds",
+      "category": "数据集",
+      "title": "实验室 ORC 台架实测数据",
+      "value": "1 kW 台架 77 组；FlexGeo TUM 1 Hz 原始过程数据（102,878 行 × 103 列）",
+      "scope": "含工质侧状态量，可用于外部对照",
+      "source": "Mendeley Data 10.17632/8ncck9946w；FlexGeo 项目（TUM）",
+      "url": "https://data.mendeley.com/datasets/8ncck9946w",
+      "caveat": "实验室台架，容量与工况域远小于工业现场；只能作方法链路验证，不能外推到工业尺度"
     }
   ]
 }

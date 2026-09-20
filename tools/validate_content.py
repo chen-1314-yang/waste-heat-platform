@@ -8,9 +8,11 @@ import os
 
 DECISIONS = {"pending", "accepted", "rejected"}
 KINDS = {"content", "placeholder", "tool", "legacy"}
+EVIDENCE_CATEGORIES = ("数据集", "标准规范", "实测案例", "造价口径", "模型与工具")
 
 REQUIRED = {
-    "evidence_item": ("id", "title", "value", "scope", "source", "caveat"),
+    "evidence_item": ("id", "category", "title", "value", "scope", "source",
+                      "caveat"),
     "calibration_item": ("id", "parameter", "kernel_value", "external",
                          "finding", "impact", "decision"),
     "boundary_item": ("item", "scope", "grade"),
@@ -50,6 +52,10 @@ def _check_list(payload, key, kind, filename):
             raise ContentError(
                 f"{filename}[{ident}]: decision 只能是 {sorted(DECISIONS)}，"
                 f"当前为 {item['decision']!r}")
+        if kind == "evidence_item" and item["category"] not in EVIDENCE_CATEGORIES:
+            raise ContentError(
+                f"{filename}[{ident}]: category 只能是 {list(EVIDENCE_CATEGORIES)}，"
+                f"当前为 {item['category']!r}")
         if kind == "changelog_entry" and not isinstance(item["changes"], list):
             raise ContentError(f"{filename}[{ident}]: changes 必须是列表")
     return items
