@@ -1,0 +1,18 @@
+{
+  "status": "in-progress",
+  "items": [
+    {
+      "id": "orc-unit-cost",
+      "parameter": "ORC 单位造价",
+      "kernel_value": "23800 元/kW（91.5 kW 小机组固定单价）",
+      "external": [
+        {"source": "中国工程口径", "value": "6400-8700 元/kW", "scope": "蒸汽路径 6-9 MW"},
+        {"source": "HeatScout 关联式", "value": "C = 3000 x Q^0.75 EUR（含安装 x1.6）"},
+        {"source": "PyPSA 技术造价库", "value": "1376 EUR/kW_el"}
+      ],
+      "finding": "内核用 91.5 kW 小机组固定单价代表全规模（100 kW-20 MW），属量纲不匹配",
+      "impact": "若切换口径，ORC 隐含回收期由 5.6 年降至 1.2-2.9 年，可能翻转推荐结论",
+      "decision": "pending"
+    }
+  ]
+}
