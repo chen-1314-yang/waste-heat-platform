@@ -12,6 +12,17 @@
         "建立演进记录"
       ],
       "relative_to_prior": "首版，无前序版本；交付版口径尚未并入本版"
+    },
+    {
+      "date": "2026-09-20",
+      "version": "1.0.1",
+      "title": "站点上线",
+      "changes": [
+        "源码推送至 GitHub 仓库 waste-heat-platform",
+        "启用 GitHub Pages 托管，获得公开网址",
+        "新增一键部署脚本 tools/deploy.py"
+      ],
+      "relative_to_prior": "仅新增部署事实，未改动任何数值口径"
     }
   ]
 }
