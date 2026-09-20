@@ -1,11 +1,11 @@
 {
   "tabs": [
-    {"id": "calc", "title": "计算", "kind": "placeholder"},
-    {"id": "realtime", "title": "实时模拟", "kind": "placeholder"},
-    {"id": "pareto", "title": "帕累托前沿", "kind": "placeholder"},
-    {"id": "lca", "title": "LCA", "kind": "placeholder"},
-    {"id": "conds", "title": "工况库", "kind": "placeholder"},
-    {"id": "method", "title": "方法说明", "kind": "placeholder"},
+    {"id": "calc", "title": "计算", "kind": "legacy"},
+    {"id": "realtime", "title": "实时模拟", "kind": "legacy"},
+    {"id": "pareto", "title": "帕累托前沿", "kind": "legacy"},
+    {"id": "lca", "title": "LCA", "kind": "legacy"},
+    {"id": "conds", "title": "工况库", "kind": "legacy"},
+    {"id": "method", "title": "方法说明", "kind": "legacy"},
     {"id": "evidence", "title": "外部证据", "kind": "content"},
     {"id": "calibration", "title": "校准工作台", "kind": "content"},
     {"id": "boundaries", "title": "边界与口径", "kind": "content"},

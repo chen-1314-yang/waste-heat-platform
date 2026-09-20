@@ -13,8 +13,23 @@ function renderTabs() {
 
 window.renderTab = function (tabId) {
   var content = window.__CONTENT__;
-  var view = window.VIEWS[tabId] || window.VIEWS.placeholder;
-  document.getElementById('view').innerHTML = view(content);
+  var viewHost = document.getElementById('view');
+  var legacyHost = document.getElementById('legacy-host');
+  var useLegacy = typeof window.isLegacyTool === 'function' &&
+                  window.isLegacyTool(tabId);
+
+  if (useLegacy) {
+    // 老站搬过来的六个功能页签：由桥接层接管
+    viewHost.innerHTML = '';
+    viewHost.hidden = true;
+    legacyHost.hidden = false;
+    window.showLegacyTool(tabId);
+  } else {
+    legacyHost.hidden = true;
+    viewHost.hidden = false;
+    var view = window.VIEWS[tabId] || window.VIEWS.placeholder;
+    viewHost.innerHTML = view(content);
+  }
 
   var buttons = document.querySelectorAll('.tab');
   for (var i = 0; i < buttons.length; i++) {

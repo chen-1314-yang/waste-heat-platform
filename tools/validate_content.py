@@ -7,7 +7,7 @@ import json
 import os
 
 DECISIONS = {"pending", "accepted", "rejected"}
-KINDS = {"content", "placeholder", "tool"}
+KINDS = {"content", "placeholder", "tool", "legacy"}
 
 REQUIRED = {
     "evidence_item": ("id", "title", "value", "scope", "source", "caveat"),
