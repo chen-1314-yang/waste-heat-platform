@@ -13,7 +13,204 @@
 </header>
 <nav class="tabs" id="tabs"></nav>
 <main id="view"></main>
-<script>window.__CONTENT__ = {"site": {"title": "工业余热回收 · 智能决策平台（新版）", "version": "1.0.0", "team": "（团队名）", "members": "（成员名单占位）", "banner": "本页为独立新版站点，与已上线的旧版互不影响"}, "tabs": [{"id": "calc", "title": "计算", "kind": "placeholder"}, {"id": "realtime", "title": "实时模拟", "kind": "placeholder"}, {"id": "pareto", "title": "帕累托前沿", "kind": "placeholder"}, {"id": "lca", "title": "LCA", "kind": "placeholder"}, {"id": "conds", "title": "工况库", "kind": "placeholder"}, {"id": "method", "title": "方法说明", "kind": "placeholder"}, {"id": "evidence", "title": "外部证据", "kind": "content"}, {"id": "calibration", "title": "校准工作台", "kind": "content"}, {"id": "boundaries", "title": "边界与口径", "kind": "content"}, {"id": "changelog", "title": "演进记录", "kind": "content"}, {"id": "learning", "title": "自主学习实验室", "kind": "placeholder"}], "evidence": {"items": [{"id": "orc-world-map", "title": "全球 ORC 装机数据库", "value": "953 台 / 3512.7 MW", "scope": "工业余热回收 331 台；中国境内 31 台；水泥 12 台；冶金 33 台", "source": "ORC World Map（Tartiere），厂商官网+新闻+论文交叉核对", "url": "https://github.com/tartieret/ORC-World-Map-SPA", "caveat": "无热源温度、无效率；953 台中 741 台工质缺失；含年份脏值"}, {"id": "eu28-waste-heat", "title": "EU28 工业过程与余热数据（TNO）", "value": "267 行，含热量（TJ/a）与温度（℃）", "scope": "按工业产品/工艺分列，附余热侧两个物流", "source": "Mendeley Data 10.17632/gyxjmvzbx8", "url": "https://data.mendeley.com/datasets/gyxjmvzbx8", "caveat": "工艺级汇总，非单一工厂实测；温度为工艺代表值"}, {"id": "gb-standards", "title": "中国国家标准（余热相关）", "value": "10 项现行", "scope": "含 GB/T 37819-2019 低温余热双循环发电装置、GB/T 40286-2021 低温双循环余热回收利用装置性能测试方法", "source": "国家标准全文公开系统检索", "url": "https://openstd.samr.gov.cn/", "caveat": "标准给出的是测试与设计方法，不含具体工程数据"}, {"id": "pypsa-orc-cost", "title": "PyPSA 技术造价库 · ORC", "value": "1376 EUR/kW_el；寿命 30 年；FOM 2%/年", "scope": "欧洲能源系统建模通用造价库", "source": "Tartiere & Astolfi 2017《A world overview of the organic Rankine cycle market》", "url": "https://github.com/PyPSA/technology-data", "caveat": "原文注明低装机量使估算不确定；为欧洲口径"}]}, "calibration": {"status": "in-progress", "items": [{"id": "orc-unit-cost", "parameter": "ORC 单位造价", "kernel_value": "23800 元/kW（91.5 kW 小机组固定单价）", "external": [{"source": "中国工程口径", "value": "6400-8700 元/kW", "scope": "蒸汽路径 6-9 MW"}, {"source": "HeatScout 关联式", "value": "C = 3000 x Q^0.75 EUR（含安装 x1.6）"}, {"source": "PyPSA 技术造价库", "value": "1376 EUR/kW_el"}], "finding": "内核用 91.5 kW 小机组固定单价代表全规模（100 kW-20 MW），属量纲不匹配", "impact": "若切换口径，ORC 隐含回收期由 5.6 年降至 1.2-2.9 年，可能翻转推荐结论", "decision": "pending"}]}, "boundaries": {"items": [{"item": "ORC 减碳量", "scope": "仿真净功率 x 运行小时 x 电网因子", "grade": "推算，非实测"}, {"item": "供热减碳", "scope": "替代天然气估算", "grade": "演示估算"}, {"item": "成本 / 回收期", "scope": "代理模型", "grade": "示意，非报价"}, {"item": "工况库非公开案例", "scope": "工程示例", "grade": "示意"}, {"item": "TOPSIS 指标", "scope": "典型演示值", "grade": "待替换"}]}, "changelog": {"entries": [{"date": "2026-09-20", "version": "1.0.0", "title": "新版站点起步", "changes": ["建立内容驱动骨架", "新增外部证据层", "新增校准工作台", "新增边界与口径页", "建立演进记录"], "relative_to_prior": "首版，无前序版本；交付版口径尚未并入本版"}, {"date": "2026-09-20", "version": "1.0.1", "title": "站点上线", "changes": ["源码推送至 GitHub 仓库 waste-heat-platform", "启用 GitHub Pages 托管，获得公开网址", "新增一键部署脚本 tools/deploy.py"], "relative_to_prior": "仅新增部署事实，未改动任何数值口径"}]}};</script>
+<div class="legacy-tool" id="legacy-host" hidden>
+<!-- 自老站 v3 迁移的六个功能页签骨架；外层由新站壳注入 -->
+<section class="legacy-section" id="tab-calc">
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h3><span class="no">1</span>场景参数</h3>
+          <div class="field">
+            <label>典型工况（可选手动自定义）</label>
+            <select id="preset"><option value="">— 手动自定义 —</option></select>
+          </div>
+          <div class="field"><label>热源温度 <b id="v-t">120 ℃</b></label>
+            <input type="range" id="in-t" min="25" max="900" step="5" value="120"></div>
+          <div class="field"><label>热源流量 <b id="v-f">50 kg/s</b></label>
+            <input type="range" id="in-f" min="0.5" max="200" step="0.5" value="50"></div>
+          <div class="field"><label>热介质</label>
+            <select id="medium"><option>热水/冷凝水</option><option>烟气</option><option>工艺液体</option></select></div>
+          <div class="field"><label>换热端差 <b id="v-dt">10 ℃</b></label>
+            <input type="range" id="in-dt" min="5" max="20" step="1" value="10"></div>
+          <div class="field"><label>年运行小时 <b id="v-h">8000 h</b></label>
+            <input type="range" id="in-h" min="1000" max="8760" step="500" value="8000"></div>
+          <div class="field"><label>用能需求</label>
+            <select id="demand">
+              <option>发电</option><option>工艺蒸汽</option><option>供暖/热水</option>
+              <option>储热调峰</option><option>供冷（制冷）</option><option>干燥/烘干</option>
+            </select></div>
+          <div class="field"><label>热源连续性</label>
+            <div class="chips"><div class="chip active" data-c="连续">连续</div><div class="chip" data-c="间歇">间歇</div></div></div>
+          <div class="field"><label>驱动来源</label>
+            <div class="chips">
+              <div class="chip active" data-drv="余热自驱动">余热自驱动</div>
+              <div class="chip" data-drv="外购蒸汽">外购蒸汽</div>
+              <div class="chip" data-drv="外购电力">外购电力</div>
+            </div></div>
+          <div class="field"><label>组合权重 λ（主观 AHP 占比）<b id="v-lam">0.50</b></label>
+            <input type="range" id="in-lam" min="0" max="1" step="0.05" value="0.5"></div>
+          <div class="note">供冷请选「余热自驱动」（吸收式）或「外购电力」（电制冷基准）；供暖可选手动「外购蒸汽」启用吸收式热泵（哈石化同型）。</div>
+          <button class="btn" id="btn">重新计算</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3><span class="no">2</span>推荐技术路线</h3>
+          <div class="route" id="route"><div class="icon" id="r-icon">⚡</div>
+            <div><div class="rname" id="r-name">—</div><div class="rsub" id="r-sub">—</div></div>
+            <div class="fit">贴近度 <b id="r-fit">—</b></div></div>
+          <div class="stats">
+            <div class="stat"><div class="k" id="s1-k">可回收热功率</div><div class="v" id="s1-v">—</div><div class="u" id="s1-u">kW</div></div>
+            <div class="stat"><div class="k" id="s2-k">年发电量</div><div class="v" id="s2-v">—</div><div class="u" id="s2-u">MWh/年</div></div>
+            <div class="stat"><div class="k">年减碳量</div><div class="v" id="s-co2">—</div><div class="u">tCO₂/年</div></div>
+            <div class="stat"><div class="k">年收益 / 节省</div><div class="v" id="s-money">—</div><div class="u">万元/年</div></div>
+          </div>
+          <div id="boundary-box"></div>
+          <div id="scope-box"></div>
+          <div class="note" id="calc-note">填写参数后点击「重新计算」；数据口径见页面底部。</div>
+        </div>
+
+        <div class="card">
+          <h3><span class="no">3</span>第一级 · 热力学规则粗筛（统一内核 v2.1，12 条路径）</h3>
+          <div class="swipe-hint">↔ 表格较宽：左右滑动查看完整列</div>
+          <div class="tbl-scroll"><table id="t-stage"></table></div>
+        </div>
+
+        <div class="card">
+          <h3><span class="no">4</span>第二级 · TOPSIS 精细排序</h3>
+          <div class="swipe-hint">↔ 表格较宽：左右滑动查看完整列</div>
+          <div class="tbl-scroll"><table id="t-topsis"></table></div>
+          <div class="note">贴近度 1.000 = 唯一可行路径或全部指标占优；投资/回收期已按规模修正（生产能力指数法），减排列按当前参数动态推算。</div>
+        </div>
+
+        <div class="card">
+          <h3><span class="no">5</span>λ 敏感性 · 权重对排序的影响</h3>
+          <svg class="chart" id="ch-lam" viewBox="0 0 780 270"></svg>
+          <div class="note" id="lam-snap">—</div>
+        </div>
+      </div>
+    </div>
+  </section>
+<section class="legacy-section" id="tab-realtime">
+    <div class="card">
+      <h3><span class="no">1</span>数据源接入</h3>
+      <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+        <div>
+          <div class="field"><label>数据源类型</label>
+            <select id="io-kind">
+              <option value="sim">模拟源（演示波形）</option>
+              <option value="file">历史文件回放（CSV/JSON）</option>
+              <option value="http">HTTP/JSON 轮询</option>
+              <option value="ws">WebSocket 推送</option>
+            </select></div>
+          <div id="io-cfg"></div>
+        </div>
+        <div>
+          <div class="field"><label>连接控制</label>
+            <span><button class="btn small" id="io-connect" style="background:#0E9F8A">● 连接</button>
+                  <button class="btn small" id="io-disconnect" style="background:#64748B">断开</button>
+                  <button class="btn small" id="io-pause" style="background:#64748B;display:none">⏸ 暂停</button>
+                  <button class="btn small" id="io-step" style="background:#64748B;display:none">单步 +1</button></span>
+          </div>
+          <div class="field"><label>状态：<b id="io-state" style="color:#64748B">未连接</b></label>
+            <div class="note" id="io-detail">—</div></div>
+          <div class="note" id="io-age-note"></div>
+          <div id="io-warn"></div>
+          <div class="note">帧协议：<code>{ts, t_src_degC, m_dot_kg_s, medium, demand, continuity, driver, dT_degC, hours, quality}</code>，详见《数据接入接口说明》。</div>
+        </div>
+      </div>
+      <div class="note">模拟源内置演示波形；历史文件可回放真实工况录波；HTTP/WebSocket 可对接本地采集桥或工厂数据网关（CORS 需网关放行）。</div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="no">2</span>实时温度曲线（最近 60 步）</h3>
+        <svg class="chart live-line" id="rt-chart" viewBox="0 0 900 240"></svg>
+        <div class="legend" id="rt-legend">—</div>
+      </div>
+      <div>
+        <div class="card">
+          <h3><span class="no">3</span>实时推荐与指标</h3>
+          <div class="route" id="rt-route"><div class="icon" id="rt-icon">⚡</div>
+            <div><div class="rname" id="rt-name">—</div><div class="rsub" id="rt-sub">—</div></div>
+            <div class="fit">贴近度 <b id="rt-fit">—</b></div></div>
+          <div class="stats">
+            <div class="stat"><div class="k">当前温度</div><div class="v" id="rt-t">—</div><div class="u">℃</div></div>
+            <div class="stat"><div class="k">年发电/产出</div><div class="v" id="rt-out">—</div><div class="u" id="rt-out-u">MWh/年</div></div>
+            <div class="stat"><div class="k">年减碳量</div><div class="v" id="rt-co2">—</div><div class="u">tCO₂/年</div></div>
+            <div class="stat"><div class="k">边界/越界提示</div><div class="v" id="rt-warn" style="font-size:13px">无</div><div class="u"></div></div>
+          </div>
+          <div id="rt-boundary"></div>
+        </div>
+        <div class="card">
+          <h3><span class="no">4</span>实时候选排序</h3>
+          <table id="rt-rank"></table>
+        </div>
+      </div>
+    </div>
+  </section>
+<section class="legacy-section" id="tab-pareto">
+    <div class="card">
+      <h3>ORC 帕累托前沿 · 净功率 — 设备成本代理</h3>
+      <svg class="chart" id="ch-orc" viewBox="0 0 900 430"></svg>
+      <div class="legend">青色渐变点 = 代理预测 100 解（按热效率着色）｜青色线 = 精确核验前沿（10 解）｜蓝点 = CoolProp 复核抽样（14 解，已剔除 2 个被支配点）｜金星 = 最优点｜红点 = 当前工况估算（每 MW 回收热口径）</div>
+    </div>
+    <div class="card">
+      <h3>碳减排 — 成本权衡（ORC）</h3>
+      <svg class="chart" id="ch-co2" viewBox="0 0 900 430"></svg>
+      <div class="legend">年碳减排 = 净功率 × 8000h × 0.5810（2021 年度全国电网平均排放因子，推算口径）</div>
+    </div>
+    <div class="card">
+      <h3>高温蒸汽朗肯前沿</h3>
+      <svg class="chart" id="ch-steam" viewBox="0 0 900 430"></svg>
+      <div class="legend">金点 = 100 解（CoolProp 复核搜索解）｜金色线 = 精确核验前沿（8 解）｜红点 = 当前工况估算（每 MW 回收热口径）</div>
+    </div>
+  </section>
+<section class="legacy-section" id="tab-lca">
+    <div class="card">
+      <h3>月度滚动降碳核算（推算口径，非实测）</h3>
+      <svg class="chart" id="ch-lca" viewBox="0 0 900 430"></svg>
+      <div class="legend">蓝绿柱 = 月度降碳｜金色线 = 全年累计｜电网因子逐月滚动（0.524~0.636 tCO₂/MWh）</div>
+    </div>
+    <div class="card">
+      <h3>蒙特卡洛 5000 次抽样 · 年降碳不确定性</h3>
+      <svg class="chart" id="ch-mc" viewBox="0 0 900 360"></svg>
+      <div class="legend" id="mc-note">—</div>
+    </div>
+  </section>
+<section class="legacy-section" id="tab-conds">
+    <div class="card">
+      <h3>工况库（data/conditions_db.csv · 19 条，含供冷/干燥案例）</h3>
+      <div class="field filt"><input id="cond-search" placeholder="搜索工况名称 / 行业 / 热源类型…"></div>
+      <div class="tbl-scroll"><table id="t-conds"></table></div>
+      <div class="note">点击任意行载入「决策计算」；除公开案例外其余为工程示例（示意），不是某工厂实测值。高于 650℃ 的行会触发「能力圈外 · 专项设计」提示（红线 v2.1）。</div>
+    </div>
+  </section>
+<section class="legacy-section" id="tab-method">
+    <div class="card method">
+      <h3>两级智能决策（决策内核 v2.1，与线上 Streamlit 平台同源）</h3>
+      <p><b>第一级 · 热力学规则粗筛：</b>按热源温度（25~650℃ 标定包络）、用能需求、连续性、驱动来源对 <b>12 条路径</b> 做物理可行性筛选——发电（ORC 110~350 / 蒸汽朗肯 280~650 / TEG）、工艺蒸汽、供暖·热水、储热调峰、<b>供冷（吸收式 ≥80℃ 余热驱动 / 电压缩电驱动基准）</b>、<b>干燥/烘干（直接热风 / 产汽 / 热泵）</b>。除湿未单列（并入供冷/干燥后评价）；外购蒸汽驱动吸收式制冷是用能设备，不设废热回收路径。</p>
+      <p><b>第二级 · TOPSIS 精细排序：</b>对通过筛选的路径构建 6 指标决策矩阵（系统能效、初始投资、投资回收期、CO₂减排、政策分、运行成本），投资/回收期按规模修正（生产能力指数法：小 500 / 中 3000 / 大 10000 kW），用 AHP+熵权组合权重（λ 可调）做逼近理想解排序，贴近度最高者推荐。</p>
+    </div>
+    <div class="card method">
+      <h3>减碳与收益估算（推算口径，与申报一致）</h3>
+      <p><b>发电路径：</b>每 MW 回收热净功率（CoolProp 物性仿真中位数）× 实际回收热功率（ṁ×cp×ΔT）× 年运行小时 × 电网因子 0.5810 tCO₂/MWh。</p>
+      <p><b>供热路径：</b>替代天然气锅炉口径（0.0561 tCO₂/GJ ÷ 锅炉效率 90%）；压缩式热泵扣除自身耗电排放（COP 2.8）；外购蒸汽驱动吸收式按哈石化口径（COP_h≈1.7）扣驱动蒸汽燃料。</p>
+      <p><b>供冷路径：</b>吸收式制冷 COP_c 分段（≥85℃ 0.7 / 80~84℃ 0.6，[待标定] 见台账），减排 = 替代电压缩电耗（COP_e=5.0，GB19577-2015）；电压缩制冷为电制冷现状基准，减排记 0。</p>
+      <p><b>成本：</b>电价 0.65 元/kWh、天然气 98 元/GJ 为演示单价假设；设备投资/回收期为文献与工程估算（吸收式/电压缩制冷 [待标定]）。</p>
+    </div>
+    <div class="card method">
+      <h3>边界工况自动提示（C3.2，2026-09-05）</h3>
+      <p>当热源温度接近直接换热下限（供暖需求温度+端差 / 干燥热风下限）或吸收式制冷 80~84℃ 驱动下限区时，页面自动给出黄色边界提示，提醒预留 ≥5℃ 端差裕量或按“直接换热优先 + 热泵兜底”双方案设计——依据决策鲁棒性核验报告（S2 型边界场景名义推荐保持概率约 50%）。</p>
+    </div>
+    <div class="card method">
+      <h3>实时数据接入接口（v3）</h3>
+      <p>页面预留统一遥测帧协议 <code>{ts, t_src_degC, m_dot_kg_s, medium, demand, continuity, driver, dT_degC, hours, quality}</code>，支持四种数据源：<b>模拟源</b>（演示波形）、<b>历史文件回放</b>（CSV/JSON，按真实时间戳）、<b>HTTP/JSON 轮询</b>、<b>WebSocket 推送</b>。现场 OPC UA / Modbus TCP 通过本地采集桥（io-bridge/）转接，字段映射与接入规范见《数据接入接口说明》。接入层只做质量标记，决策仍由统一内核完成——数据流入口与决策内核完全解耦。</p>
+    </div>
+    <div class="warn">数据口径与免责声明：本平台为竞赛演示。CoolProp 物性仿真（ORC 5925 工况交互响应 / 1675 工况优化口径 + 蒸汽朗肯 1600 工况，能量守恒偏差 &lt;1e-9 kW）、代理模型、TOPSIS 指标与成本均采用演示/文献口径；公开案例仅用于方法回溯，不代表本工具实测。正式工程应用须以现场实测与完整校核为准。</div>
+  </section>
+</div>
+<script>window.__CONTENT__ = {"site": {"title": "工业余热回收 · 智能决策平台（新版）", "version": "1.0.0", "team": "（团队名）", "members": "（成员名单占位）", "banner": "本页为独立新版站点，与已上线的旧版互不影响"}, "tabs": [{"id": "calc", "title": "计算", "kind": "legacy"}, {"id": "realtime", "title": "实时模拟", "kind": "legacy"}, {"id": "pareto", "title": "帕累托前沿", "kind": "legacy"}, {"id": "lca", "title": "LCA", "kind": "legacy"}, {"id": "conds", "title": "工况库", "kind": "legacy"}, {"id": "method", "title": "方法说明", "kind": "legacy"}, {"id": "evidence", "title": "外部证据", "kind": "content"}, {"id": "calibration", "title": "校准工作台", "kind": "content"}, {"id": "boundaries", "title": "边界与口径", "kind": "content"}, {"id": "changelog", "title": "演进记录", "kind": "content"}, {"id": "learning", "title": "自主学习实验室", "kind": "placeholder"}], "evidence": {"items": [{"id": "orc-world-map", "title": "全球 ORC 装机数据库", "value": "953 台 / 3512.7 MW", "scope": "工业余热回收 331 台；中国境内 31 台；水泥 12 台；冶金 33 台", "source": "ORC World Map（Tartiere），厂商官网+新闻+论文交叉核对", "url": "https://github.com/tartieret/ORC-World-Map-SPA", "caveat": "无热源温度、无效率；953 台中 741 台工质缺失；含年份脏值"}, {"id": "eu28-waste-heat", "title": "EU28 工业过程与余热数据（TNO）", "value": "267 行，含热量（TJ/a）与温度（℃）", "scope": "按工业产品/工艺分列，附余热侧两个物流", "source": "Mendeley Data 10.17632/gyxjmvzbx8", "url": "https://data.mendeley.com/datasets/gyxjmvzbx8", "caveat": "工艺级汇总，非单一工厂实测；温度为工艺代表值"}, {"id": "gb-standards", "title": "中国国家标准（余热相关）", "value": "10 项现行", "scope": "含 GB/T 37819-2019 低温余热双循环发电装置、GB/T 40286-2021 低温双循环余热回收利用装置性能测试方法", "source": "国家标准全文公开系统检索", "url": "https://openstd.samr.gov.cn/", "caveat": "标准给出的是测试与设计方法，不含具体工程数据"}, {"id": "pypsa-orc-cost", "title": "PyPSA 技术造价库 · ORC", "value": "1376 EUR/kW_el；寿命 30 年；FOM 2%/年", "scope": "欧洲能源系统建模通用造价库", "source": "Tartiere & Astolfi 2017《A world overview of the organic Rankine cycle market》", "url": "https://github.com/PyPSA/technology-data", "caveat": "原文注明低装机量使估算不确定；为欧洲口径"}]}, "calibration": {"status": "in-progress", "items": [{"id": "orc-unit-cost", "parameter": "ORC 单位造价", "kernel_value": "23800 元/kW（91.5 kW 小机组固定单价）", "external": [{"source": "中国工程口径", "value": "6400-8700 元/kW", "scope": "蒸汽路径 6-9 MW"}, {"source": "HeatScout 关联式", "value": "C = 3000 x Q^0.75 EUR（含安装 x1.6）"}, {"source": "PyPSA 技术造价库", "value": "1376 EUR/kW_el"}], "finding": "内核用 91.5 kW 小机组固定单价代表全规模（100 kW-20 MW），属量纲不匹配", "impact": "若切换口径，ORC 隐含回收期由 5.6 年降至 1.2-2.9 年，可能翻转推荐结论", "decision": "pending"}]}, "boundaries": {"items": [{"item": "ORC 减碳量", "scope": "仿真净功率 x 运行小时 x 电网因子", "grade": "推算，非实测"}, {"item": "供热减碳", "scope": "替代天然气估算", "grade": "演示估算"}, {"item": "成本 / 回收期", "scope": "代理模型", "grade": "示意，非报价"}, {"item": "工况库非公开案例", "scope": "工程示例", "grade": "示意"}, {"item": "TOPSIS 指标", "scope": "典型演示值", "grade": "待替换"}]}, "changelog": {"entries": [{"date": "2026-09-20", "version": "1.0.0", "title": "新版站点起步", "changes": ["建立内容驱动骨架", "新增外部证据层", "新增校准工作台", "新增边界与口径页", "建立演进记录"], "relative_to_prior": "首版，无前序版本；交付版口径尚未并入本版"}, {"date": "2026-09-20", "version": "1.0.1", "title": "站点上线", "changes": ["源码推送至 GitHub 仓库 waste-heat-platform", "启用 GitHub Pages 托管，获得公开网址", "新增一键部署脚本 tools/deploy.py"], "relative_to_prior": "仅新增部署事实，未改动任何数值口径"}, {"date": "2026-09-20", "version": "1.1.0", "title": "老站六个功能页签迁入", "changes": ["决策内核 v2.1、实时数据接入层、内嵌数据整体迁入", "计算 / 实时模拟 / 帕累托前沿 / LCA / 工况库 / 方法说明 六页签恢复可用", "老站 CSS 加 .legacy-tool 作用域，避免与新站样式冲突", "老站初始化改为可被新站壳调用，并加上错误捕获与状态标记"], "relative_to_prior": "两个工况（120℃·50kg/s·发电；320℃·80kg/s·工艺蒸汽）与老站逐项对拍一致，数值口径未变"}]}};</script>
 <script src="./assets/app.js"></script>
 </body>
 </html>

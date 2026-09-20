@@ -111,3 +111,51 @@ th{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap}
   td{border:none;border-bottom:1px dashed var(--line);padding:6px 2px}
   td:last-child{border-bottom:none}
 }
+
+/* 自老站 v3 迁移，选择器已加 .legacy-tool 作用域 */
+.legacy-tool *{ margin: 0; padding: 0; box-sizing: border-box; }.legacy-tool{
+      --bg: #F5F9FC; --card: #FFFFFF; --line: #DCE7F0;
+      --ink: #16324F; --muted: #5E7387; --soft: #8AA0B4;
+      --green: #0E9F8A; --green-soft: #EAF6F3; --green-line: #BEE5DC;
+      --blue: #3D6FB4; --gold: #E8A33D; --red: #E05252;
+    }.legacy-tool, .legacy-tool{ min-height: 100vh; }.legacy-tool{
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(900px 420px at 12% -6%, rgba(14,159,138,.10), transparent 55%),
+        radial-gradient(760px 380px at 96% -4%, rgba(61,111,180,.08), transparent 55%),
+        var(--bg);
+      color: var(--ink);
+    }.legacy-tool .wrap{ max-width: 1320px; margin: 0 auto; padding: 24px 20px 70px; }.legacy-tool header{ display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }.legacy-tool h1{ font-size: 27px; font-weight: 800; letter-spacing: .3px;
+         background: linear-gradient(92deg, #0B7A6A, #14508C);
+         -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }.legacy-tool .tag{ margin-left: auto; padding: 5px 13px; border-radius: 999px;
+           background: linear-gradient(92deg, #0E9F8A, #3D6FB4); color: #fff;
+           font-size: 12px; font-weight: 700; letter-spacing: .1em; }.legacy-tool .sub{ width: 100%; font-size: 13px; color: var(--muted); margin-top: 3px; }.legacy-tool nav{ display: flex; gap: 8px; margin: 18px 0 6px; flex-wrap: wrap; }.legacy-tool nav button{ padding: 10px 20px; border-radius: 10px; cursor: pointer;
+                 border: 1.5px solid var(--line); background: var(--card);
+                 color: var(--muted); font-size: 14px; font-weight: 700;
+                 transition: all .16s ease; box-shadow: 0 2px 8px rgba(22,50,79,.05); }.legacy-tool nav button:hover{ border-color: var(--green-line); color: var(--green); transform: translateY(-1px); }.legacy-tool nav button.active{ background: linear-gradient(92deg, #0E9F8A, #0B7A6A);
+                        border-color: transparent; color: #fff;
+                        box-shadow: 0 6px 16px rgba(14,159,138,.28); }.legacy-tool section.tab{ display: none; }.legacy-tool section.tab.active{ display: block; animation: fadeUp .35s ease both; }@keyframes fadeUp{ from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }.legacy-tool .grid{ display: grid; grid-template-columns: 350px 1fr; gap: 18px; align-items: start; }.legacy-tool .grid > div{ min-width: 0; }.legacy-tool .card{ background: var(--card); border: 1px solid var(--line); border-radius: 15px;
+            box-shadow: 0 8px 26px rgba(22,50,79,.07); padding: 18px 20px; margin-bottom: 16px; }.legacy-tool .card h3{ font-size: 15px; font-weight: 800; margin-bottom: 13px; display: flex; align-items: center; gap: 8px; }.legacy-tool .card h3 .no{ width: 24px; height: 24px; border-radius: 7px; flex: 0 0 auto;
+                   background: linear-gradient(135deg, #0E9F8A, #3D6FB4); color: #fff;
+                   display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }.legacy-tool .field{ margin-bottom: 12px; }.legacy-tool .field label{ display: flex; justify-content: space-between; font-size: 13px;
+                   color: var(--muted); margin-bottom: 4px; }.legacy-tool .field label b{ color: var(--ink); font-family: "Segoe UI", Arial, sans-serif; }.legacy-tool input[type=range]{ width: 100%; min-width: 0; accent-color: var(--green); }.legacy-tool select, .legacy-tool input[type=number]{ width: 100%; max-width: 100%; min-width: 0; padding: 8px 10px; border: 1.5px solid var(--line);
+      border-radius: 9px; font-size: 14px; color: var(--ink); background: #F8FBFD; }.legacy-tool .chips{ display: flex; gap: 7px; flex-wrap: wrap; }.legacy-tool .chip{ flex: 1; text-align: center; padding: 8px 0; border-radius: 9px; cursor: pointer;
+            border: 1.5px solid var(--line); background: #F8FBFD; font-size: 13px;
+            font-weight: 700; color: var(--muted); min-width: 78px; transition: all .14s ease; }.legacy-tool .chip:hover{ border-color: var(--green-line); }.legacy-tool .chip.active{ background: var(--green); border-color: var(--green); color: #fff;
+                   box-shadow: 0 4px 12px rgba(14,159,138,.22); }.legacy-tool .btn{ width: 100%; padding: 13px 0; border: 0; border-radius: 11px; cursor: pointer;
+           background: linear-gradient(92deg, #0E9F8A, #0B7A6A); color: #fff;
+           font-size: 15px; font-weight: 800; letter-spacing: .12em;
+           box-shadow: 0 6px 16px rgba(14,159,138,.26); transition: transform .15s ease; }.legacy-tool .btn:hover{ transform: translateY(-1px); }.legacy-tool .btn.small{ width: auto; padding: 9px 18px; font-size: 13px; letter-spacing: .04em; }.legacy-tool .route{ display: flex; align-items: center; gap: 14px; padding: 15px 17px; border-radius: 13px;
+             background: linear-gradient(135deg, #EAF6F3, #F3FAF9);
+             border: 1.5px solid var(--green-line); margin-bottom: 13px; }.legacy-tool .route .icon{ width: 46px; height: 46px; border-radius: 13px; flex: 0 0 auto;
+                   background: linear-gradient(135deg, #0E9F8A, #3D6FB4); color: #fff;
+                   display: flex; align-items: center; justify-content: center; font-size: 22px; }.legacy-tool .route .rname{ font-size: 18px; font-weight: 800; }.legacy-tool .route .rsub{ font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.55; }.legacy-tool .route .fit{ margin-left: auto; text-align: right; white-space: nowrap; }.legacy-tool .route .fit b{ font-size: 20px; color: var(--green); font-family: "Segoe UI", Arial, sans-serif; }.legacy-tool .stats{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }.legacy-tool .stat{ background: #F7FAFD; border: 1px solid #E4EDF5; border-radius: 12px; padding: 12px 13px; }.legacy-tool .stat .k{ font-size: 12px; color: var(--soft); }.legacy-tool .stat .v{ font-size: 21px; font-weight: 800; margin-top: 3px;
+               font-family: "Segoe UI", Arial, sans-serif; color: var(--ink); }.legacy-tool .stat .u{ font-size: 11px; color: var(--soft); }.legacy-tool table{ width: 100%; border-collapse: collapse; font-size: 13px; }.legacy-tool th{ text-align: left; background: #F2F8FC; color: #3D5367; padding: 8px 10px;
+         border-bottom: 1px solid #E4EDF5; white-space: nowrap; }.legacy-tool td{ padding: 8px 10px; border-bottom: 1px solid #EEF3F8; color: #3D5367; vertical-align: top; }.legacy-tool tr.best td{ background: var(--green-soft); font-weight: 700; color: var(--ink); }.legacy-tool .ok{ color: var(--green); font-weight: 700; }.legacy-tool .no{ color: var(--red); font-weight: 700; }.legacy-tool .chart{ width: 100%; background: #fff; border-radius: 12px; }.legacy-tool .legend{ font-size: 12px; color: var(--soft); margin-top: 7px; line-height: 1.65; }.legacy-tool .note{ font-size: 12px; color: var(--soft); line-height: 1.7; margin-top: 8px; }.legacy-tool .warn{ font-size: 12.5px; color: #7A5B1F; background: #FFF8EC; border: 1px solid #F0D9A8;
+            border-radius: 11px; padding: 12px 14px; line-height: 1.75; margin: 12px 0; }.legacy-tool .warn.boundary{ color: #6B4E12; background: #FFF6E0; border-color: #EBCB84; }.legacy-tool .filt{ margin-bottom: 10px; }.legacy-tool .cond-row{ cursor: pointer; }.legacy-tool .cond-row:hover td{ background: #F2FAF8; }.legacy-tool .method p{ font-size: 13px; color: var(--muted); line-height: 1.95; margin-bottom: 9px; }.legacy-tool .method b{ color: var(--ink); }.legacy-tool .badge-mini{ display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+                  background: #EAF3FB; color: #2C5F9E; font-weight: 700; margin-left: 6px; }.legacy-tool .live-line{ height: 250px; }.legacy-tool .statline{ display: flex; gap: 14px; align-items: baseline; font-size: 13px; color: var(--muted); flex-wrap: wrap; }.legacy-tool .statline b{ color: var(--green); font-size: 16px; font-family: "Segoe UI", Arial, sans-serif; }.legacy-tool .tbl-scroll{ overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }.legacy-tool .swipe-hint{ display: none; }@media (max-width: 900px){.legacy-tool .wrap{ padding: 16px 12px 50px; }.legacy-tool h1{ font-size: 21px; }.legacy-tool .grid{ grid-template-columns: minmax(0, 1fr); }.legacy-tool .stats{ grid-template-columns: repeat(2, 1fr); }.legacy-tool .route{ flex-wrap: wrap; }.legacy-tool .route .fit{ margin-left: 0; }.legacy-tool nav button{ flex: 1 1 30%; padding: 9px 4px; font-size: 12.5px; }.legacy-tool .swipe-hint{ display: block; font-size: 11.5px; color: #2C7A6D; margin: 2px 0 6px; }.legacy-tool .tbl-scroll{ border: 1px solid #E4EDF5; }
+    }@media (prefers-reduced-motion: reduce){.legacy-tool *, .legacy-tool *::before, .legacy-tool *::after{ animation: none !important; transition: none !important; } }
+  
+/* 老站用 section.tab 切页；新站导航占用了 .tab，故改名为 .legacy-section */
+.legacy-tool .legacy-section{display:none}
+.legacy-tool .legacy-section.active{display:block;animation:fadeUp .35s ease both}
