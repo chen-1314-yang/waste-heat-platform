@@ -11,8 +11,9 @@ import validate_content  # noqa: E402
 
 SINGLE_NAME = "工业余热回收_新版_单文件.html"
 STYLE_FILES = ["tokens.css", "base.css", "components.css"]
-SCRIPT_FILES = ["views/placeholder.js", "views/evidence.js", "views/calibration.js",
-                "views/boundaries.js", "views/changelog.js", "app.js"]
+SCRIPT_FILES = ["util.js", "views/placeholder.js", "views/evidence.js",
+                "views/calibration.js", "views/boundaries.js",
+                "views/changelog.js", "app.js"]
 
 
 def _read(path):
