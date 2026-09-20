@@ -1,0 +1,8 @@
+:root{
+  --bg:#F5F9FC; --card:#FFFFFF; --line:#DCE7F0;
+  --ink:#16324F; --muted:#5E7387; --soft:#8AA0B4;
+  --accent:#0E9F8A; --accent-soft:#EAF6F3; --accent-line:#BEE5DC;
+  --blue:#3D6FB4; --gold:#E8A33D; --red:#E05252;
+  --radius:12px; --gap:16px;
+  --font-cn:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;
+}
