@@ -316,12 +316,40 @@ window.WHENG = (function () {
   function recoveredHeatKw(scene) {
     const m = scene["流量_kg_s"];
     if (m) {
-      const dt = Math.max(Number(scene["热源温度_degC"]) - 40.0 - Number(scene["换热端差_degC"]), 5.0);
+      const dt = Math.max(Number(scene["热源温度_degC"]) - heatFloor(scene) -
+                          Number(scene["换热端差_degC"]), 5.0);
       return Number(m) * CP[scene["载体"]] * dt;
     }
     const q = scene["规模_kW"];
     if (q) return Number(q);
     throw new Error("缺少流量或规模_kW，无法计算可回收热功率");
+  }
+
+  /* 源侧降温下限（2026-09-27 按实测修正，第五轮）。
+
+     旧算法：一律按"冷到 40℃"算可回收热 —— 对用热类路径是**高估**，
+     因为热量只能回收到"下游用得上"的温度为止。
+
+     实测证据（三条）：
+       · 首钢京唐/迁钢 高炉冲渣水供暖：75℃ → 65℃ 采暖水（**实际只降 10 K**），
+         而旧算法按 75−40−端差 = 25 K 算，**高估 2.5 倍**；
+       · 金色漫香苑 烟气余热回收：排烟 100 → 37℃（直接接触式，接近降到接近环境）；
+       · 燕山石化 S-Zorb（发电，另计）：汽油 135 → 70℃。
+
+     新算法（仅用于**用热类需求**：供暖·热水/工艺蒸汽/干燥/储热调峰）：
+        下限 = min(需求温度 + 换热端差, 热源温度 − 10 K)
+        —— 前一项是物理约束（送出的热必须高于需求温度并留端差）；
+           后一项保证"热源本身高于需求温度"的场景（如热泵驱动的低温余热）
+           仍能取出至少 10 K 的温降，而不是被算成 0。
+
+     发电类暂不改：ORC 的取值需要"按路径分别算回收热"（ORC 与蒸汽朗肯的
+     降温程不同），属于下一步的重构，已在边界页登记。 */
+  const HEAT_MIN_COOLDOWN_K = 10.0;
+  function heatFloor(scene) {
+    const tSrc = Number(scene["热源温度_degC"]);
+    const dT = Number(scene["换热端差_degC"]);
+    if (scene["需求"] === "发电") return 40.0;   // 暂维持旧口径（见上）
+    return Math.min(compSupplyTemp(scene) + dT, tSrc - HEAT_MIN_COOLDOWN_K);
   }
 
   function scaleBand(qKw) { return qKw < 1000 ? "小" : (qKw <= 5000 ? "中" : "大"); }
