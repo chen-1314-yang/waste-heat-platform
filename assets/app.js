@@ -192,7 +192,14 @@ window.WHENG = (function () {
      依据：第三轮检索拿到分省峰谷电价——山东 2025-04 一般工商业 35 kV：
      深谷 0.25、低谷 0.35、平 0.71、高峰 1.00、尖峰 1.20 元/kWh（尖峰−深谷 0.95）。
      取低谷 0.35 作为默认充电电价。 */
-  let PRICES = { elec: 0.65, heatingHours: HEATING_SEASON_HOURS,
+  /* 电价默认值 2026-09-27 由 0.65 调整为 0.68：
+     第四轮检索取得 7 省官方代理购电工商业到户电价（两部制 1-10kV 平段、
+     含购电+线损+输配电价+系统运行+基金附加，均可逐项加总复核）——
+     浙江 0.6101、湖北 0.6273、上海 0.6407、江苏 0.6756、四川 0.6864、
+     河南 0.6943、广东珠三角 0.7068；连同已有的安徽 0.6844、山东 0.71 共 9 省，
+     中位数 0.6844 ≈ 0.68，区间 0.55~0.72。原默认 0.65 取两省偏保守值，
+     现按 9 省中位取 0.68（界面仍可调 0.30~0.80）。 */
+  let PRICES = { elec: 0.68, heatingHours: HEATING_SEASON_HOURS,
                  heatPrice: 98.0, valleyElec: 0.35 };
   function setPrices(p) {
     if (!p) return;
@@ -462,7 +469,20 @@ window.WHENG = (function () {
       setk("whb_steam", t >= tSteam + 20,
         t >= tSteam + 20 ? ("热源 " + t + "℃ ≥ 蒸汽 " + tSteam + "℃ + 端差 20℃，可直接产汽")
           : ("热源 " + t + "℃ 不足以直接产生 " + tSteam + "℃ 蒸汽（需 ≥" + (tSteam + 20) + "℃）"));
-      setk("abs_self", t >= 90, t >= 90 ? ("热源 " + t + "℃ 可自驱动吸收式（≥90℃）") : "吸收式自驱动需 ≥90℃ 驱动热源");
+      /* 二类（升温型 AHT）用于制蒸汽时的可行性（2026-09-27 按第四轮实测数据加门槛）：
+         二类需要"驱动温度 < 输出温度"，即热源必须**低于**蒸汽温度；且温升有上限——
+         工信部 2021 指南：单级 +30~40 K → COP 0.45~0.48、两级 +40~60 K → 0.3；
+         GB/T 报批稿限定值 单级 ≥0.44、两级 ≥0.28。故要求 90 ≤ 热源 < 蒸汽温度−5 且温升 ≤60 K。
+         若热源本身已高于蒸汽温度，应直接产汽（whb_steam），而不是用升温型热泵。 */
+      const tSteamNeed = tDem || 152.0;
+      const absLift = tSteamNeed - t;
+      setk("abs_self", t >= 90 && absLift > 5 && absLift <= 60,
+        (t >= 90 && absLift > 5 && absLift <= 60)
+          ? ("二类升温型：热源 " + t + "℃ → 蒸汽 " + tSteamNeed +
+             "℃，温升 " + absLift.toFixed(0) + " K（" + (absLift <= 40 ? "单级档 COP≈0.45" : "两级档 COP≈0.30") + "）")
+          : (t < 90 ? ("吸收式自驱动需 ≥90℃ 驱动热源（当前 " + t + "℃）")
+             : (absLift <= 5 ? ("热源已高于蒸汽需求温度，应直接产汽（whb_steam），无需升温型热泵")
+                : ("温升 " + absLift.toFixed(0) + " K 超过 60 K，超出单/两级吸收式标定范围"))));
       const ciSteam = compCopFor(scene);
       setk("comp", !!ciSteam,
         ciSteam
