@@ -14,7 +14,11 @@ window.linkOrText = function (url, label) {
          window.esc(label || url) + '</a>';
 };
 
-/* decision engine v2.1 -> JS 移植（唯一权威：11_决策内核v2_全温域/decision_core.py）
+/* decision engine v2.1 -> JS 移植（路径筛选、指标公式、红线照 11_决策内核v2_全温域/decision_core.py）
+   ⚠ 与 Python 内核的**一处已知差异**（2026-09-27 证据链体检查出，尚未对齐）：
+     排序权重本文件用「AHP 主观权重 + 熵权」按 λ 混合（默认 λ=0.5，界面可调），
+     而 Python 内核的 load_weights() 只读 主观权重_AHP，既没有熵权也没有 λ。
+     因此同一场景两边排序可能不同。要对齐就二选一：给内核补熵权，或本文件退回单权重。
    红线（v2.1）：供冷/干燥受支持；除湿未单列；外购蒸汽驱动吸收式制冷不设废热回收路径；
    能力圈外不硬推荐；温度包络 25~650℃。 */
 window.WHENG = (function () {
@@ -310,7 +314,9 @@ window.WHENG = (function () {
     const hours = Number(scene["年运行小时"]);
     let e = null;
     if (path === "orc") e = orcEffPct(Number(scene["热源温度_degC"]), Number(scene["换热端差_degC"]));
-    else e = steamEffPct(Number(scene["热源温度_degC"]));
+    else if (path === "steam_pp") e = steamEffPct(Number(scene["热源温度_degC"]));
+    else if (path === "teg") e = BASE_INDICATORS.teg[0];  // TEG 能效列（5%）
+    else return 0.0;
     if (!e) return 0.0;
     const mwh = (e / 100.0) * q * hours / 1000.0;
     return mwh * GRID_EF;
@@ -360,7 +366,11 @@ window.WHENG = (function () {
     }
     for (let i = 0; i < survivors.length; i++) {
       const p = survivors[i];
-      if (p === "orc" || p === "steam_pp") X[i][3] = pyRound(powerReduction(p, scene), 1);
+      // TEG 也是发电路径，减排列以前整条漏算 → 恒显示 0，
+      // 等于对外说"TEG 不减排"，是假数（2026-09-27 证据链体检）。
+      if (p === "orc" || p === "steam_pp" || p === "teg") {
+        X[i][3] = pyRound(powerReduction(p, scene), 1);
+      }
     }
     return X;
   }
@@ -380,6 +390,10 @@ window.WHENG = (function () {
 
   function entropyWeights(X) {
     const n = X.length, m = X[0].length;
+    // 单候选时熵权在数学上无定义（ln1 = 0 → 0/0 = NaN）。以前不拦：
+    // 供冷场景只剩吸收式一条路时权重整列 NaN，界面 λ 敏感性曲线画不出来。
+    // 退回等权（此时排序本来也只有一条路，贴近度按约定取 1）。
+    if (n <= 1) return X[0].map(function () { return 1.0 / m; });
     const xmin = [], xmax = [];
     for (let j = 0; j < m; j++) {
       let a = Infinity, b = -Infinity;
@@ -879,6 +893,52 @@ window.HFDATA = {"orcPct":[[100,73.1953,87.0479,102.4251,25],[102,73.1953,87.047
 window.HFDATA = window.HFDATA || {};
 window.HFDATA.orcPct = [[100.0,73.1953,87.0479,102.4251,25],[110.0,76.9144,92.7908,111.0185,75],[120.0,80.842,98.1041,116.9693,125],[130.0,84.0967,103.5363,124.5931,200],[140.0,85.0079,106.6325,129.326,250],[150.0,84.5013,106.9922,130.5802,250],[160.0,83.6404,106.5859,130.7287,250],[170.0,82.8649,106.1304,130.3104,250],[180.0,81.9466,105.3824,129.614,250],[190.0,81.0193,104.4804,128.7046,250],[200.0,80.1085,103.5442,127.8607,250],[210.0,79.2118,102.6701,126.8672,250],[220.0,78.3551,101.7664,125.82,250],[230.0,77.5338,100.8124,124.7309,250],[240.0,76.7174,99.7749,123.6054,250],[250.0,75.9083,98.7664,122.4678,250],[260.0,75.1087,97.7664,121.3252,250],[270.0,74.3199,96.7745,120.1832,250],[280.0,73.5431,95.7932,119.0356,250],[290.0,72.7793,94.8209,117.8721,250],[300.0,72.029,93.8613,116.7238,250],[310.0,71.2939,92.957,115.5923,250],[320.0,70.5738,92.0664,114.4788,250],[330.0,69.8682,91.1902,113.3841,250],[340.0,69.177,90.329,112.3087,250],[350.0,68.5002,89.4833,111.2532,250]];
 window.HFDATA.orcPctSource = "CoolProp-按温度档中位数";
+
+/* 数据修补层 —— 只修"提取过程把字段弄坏"的地方，不碰任何计算逻辑。
+   必须放在 legacy/hfdata.js 之后、legacy/ui.js 之前。
+
+为什么要有这一层：hfdata.js 是从老站单文件 HTML 里机械提取出来的资产，
+里面的 conds（工况库）原本是一段 CSV 文本。CSV 里字段中带逗号又没转义，
+结果"公开案例（Feng等, 2024）"被切成两列，界面上就显示成
+     "公开案例（Feng等
+——引号是残留的转义符，后面的年份整个丢了。这类损坏不能靠重跑提取脚本修，
+因为老站 HTML 里本身就是坏的；所以在构建链上加一层补丁。
+
+判定规则刻意保守：只有当第 12 列（索引 12）里出现引号时才认为是"被切开的
+来源字段"，把两半接回来；其余行一律不碰。
+*/
+(function () {
+  "use strict";
+  var D = window.HFDATA;
+  if (!D || !D.conds || !D.conds.length) { return; }
+
+  var patched = 0;
+  D.conds.forEach(function (row) {
+    var head = row[11];
+    var tail = row[12];
+    if (typeof head !== "string") { return; }
+
+    if (typeof tail === "string" &&
+        (head.indexOf('"') >= 0 || tail.indexOf('"') >= 0)) {
+      head = (head + "，" + tail).replace(/"/g, "").trim();
+      row[11] = head;
+      row[12] = "";
+      patched += 1;
+    }
+
+    /* 来源标注补一个限定词：这几行虽然挂着"公开案例"的名字，
+       但行里的温度/流量/端差是台账 §3 说明的"演示输入"，不是案例原文读数。
+       数据来源台账 §3：「工况库 conditions_db.csv（16 个典型工况……
+       3 个公开案例 + 工程示例（示意），非实测」。
+       只加限定词，不改任何数值。 */
+    if (row[11].indexOf("公开案例") === 0 && row[11].indexOf("示意") < 0) {
+      row[11] = row[11] + " · 输入为示意";
+      patched += 1;
+    }
+  });
+
+  if (D.meta) { D.meta.condsPatched = patched; }
+})();
 
 
 const eng = window.WHENG;
