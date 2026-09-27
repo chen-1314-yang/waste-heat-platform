@@ -155,6 +155,24 @@ window.WHENG = (function () {
   const OPEX_RATE = { comp: 0.05, comp_cool: 0.05, abs_self: 0.05, abs_ext: 0.05 };
   const OPEX_RATE_DEFAULT = 0.04;
 
+  /* 技术成熟度门槛（2026-09-27 新增）：TRL < 6 的路径不进推荐池。
+     起因：热化学储热经两轮检索确认——全球仍在实验室/中试（TRL 3~5），
+     不存在带投资额的项目，所以它不该和已商业化路径同表比经济性，
+     继续找数据也没有意义（不是渠道问题，是产业阶段问题）。
+     其余路径的成熟度依据：ORC／蒸汽朗肯／直接换热／余热锅炉／压缩式热泵／
+     制冷两条＝9（在运工程多）；TEG＝8（2.5 MW 级商品在售）；
+     相变储热＝8（国内多个商业项目在运：辽宁邮电、天津水游城、西安高新等）。 */
+  const TRL_MIN = 6;
+  const TRL = {
+    orc: 9, steam_pp: 9, direct: 9, whb_steam: 9, comp: 9,
+    abs_self: 8, abs_ext: 8, abs_cool: 9, comp_cool: 9,
+    teg: 8, pcm_storage: 8, tc_storage: 4
+  };
+  function trlOk(p) {
+    const v = TRL[p] === undefined ? 9 : TRL[p];
+    return v >= TRL_MIN;
+  }
+
   /* 供暖·热水的季节性折算（2026-09-27 外部检索，E1 项）。
      供暖不是全年用热：收益与减排必须按"供暖季等效满负荷小时"计，不能按 8,000 h。
      依据：鄂尔多斯市政供热规划 2,872 h、陕西恒源厂区采暖 3,571 h（外部检索）；
@@ -165,14 +183,21 @@ window.WHENG = (function () {
 
   /* 可调参数（2026-09-27 做成界面参数，供"换地区/换计价方式"现场演示）。
      默认值与出处见上；setPrices() 由界面调用，只影响之后的计算。 */
-  let PRICES = { elec: 0.65, heatingHours: HEATING_SEASON_HOURS };
+  /* heatPrice（元/GJ）：产热类路径的收益单价。默认 98＝台账 §3 的"替代天然气"口径；
+     但工艺蒸汽场景实际替代的是**蒸汽**，台账 §4 记：工业低压蒸汽上沿约 100、
+     2024 行业市场均价 39.7 元/GJ —— 两者差 2.5 倍，直接决定产汽路径的回收期
+     （余热锅炉按 98 算 0.6 年、按 40 算约 1.7 年）。
+     因此不硬改默认值，而是做成可调参数，并在边界页写明敏感性。 */
+  let PRICES = { elec: 0.65, heatingHours: HEATING_SEASON_HOURS, heatPrice: 98.0 };
   function setPrices(p) {
     if (!p) return;
     if (p.elec > 0) PRICES.elec = Number(p.elec);
     if (p.heatingHours > 0) PRICES.heatingHours = Number(p.heatingHours);
+    if (p.heatPrice > 0) PRICES.heatPrice = Number(p.heatPrice);
   }
   function elecPrice() { return PRICES.elec; }
   function heatingHoursCap() { return PRICES.heatingHours; }
+  function heatPrice() { return PRICES.heatPrice; }
 
   /* 经济性标定状态。为什么要分级：台账 §5 自己写明——
      直接换热/余热锅炉的投资回收期是"工程估算"，储热/TEG 是"示意"。
@@ -344,7 +369,7 @@ window.WHENG = (function () {
       return (1.0 / COP_E_COOL) * hours * elecPrice() * 1000.0 / 10000.0;  // 替代电制冷耗电
     }
     // 其余为产热路径：每 MW 热装机 × 小时 = MWh → GJ → 替代天然气
-    return hours * 3.6 * GAS_PRICE / 10000.0;
+    return hours * 3.6 * heatPrice() / 10000.0;
   }
 
   /* 年能耗成本（万元 / MW装机·年）：只对"自己要耗电/耗汽"的路径非零 */
@@ -493,7 +518,15 @@ window.WHENG = (function () {
       setk("abs_cool", false, "储热调峰需求不产冷");
       setk("comp_cool", false, "储热调峰需求不产冷");
     }
-    PATH_KEYS.forEach((p) => { if (why[p] === undefined) setk(p, keep[p] === true, "通过第一级筛选"); });
+    PATH_KEYS.forEach((p) => {
+      // 技术成熟度门槛优先于各需求的放行规则：TRL<6 一律不进推荐池
+      if (!trlOk(p)) {
+        setk(p, false, "技术成熟度 TRL " + TRL[p] + "，未达商业化门槛（<" + TRL_MIN +
+          "）：仅作技术储备展示，不参与经济性排序");
+        return;
+      }
+      if (why[p] === undefined) setk(p, keep[p] === true, "通过第一级筛选");
+    });
     return { keep, reasons: why };
   }
 
@@ -876,15 +909,15 @@ window.WHENG = (function () {
     if (cop) {
       const mwhE = heatGj / 3.6 / cop;
       const co2E = mwhE * GRID_EF;
-      return { q, heatGj, co2: Math.max(replaced - co2E, 0), money: (heatGj * GAS_PRICE - mwhE * 1000 * elecPrice()) / 10000 };
+      return { q, heatGj, co2: Math.max(replaced - co2E, 0), money: (heatGj * heatPrice() - mwhE * 1000 * elecPrice()) / 10000 };
     }
-    return { q, heatGj, co2: replaced, money: heatGj * GAS_PRICE / 10000 };
+    return { q, heatGj, co2: replaced, money: heatGj * heatPrice() / 10000 };
   }
 
   return {
     PATH_KEYS, DISPLAY, INDICATORS, DIRECTIONS, CP, BASE_INDICATORS,
     ABS_COOL_T_MIN, COP_C_ABS, COP_E_COOL, GRID_EF, ELEC_PRICE, HP_COP,
-    setPrices, elecPrice, heatingHoursCap, HEATING_SEASON_HOURS,
+    setPrices, elecPrice, heatingHoursCap, heatPrice, HEATING_SEASON_HOURS, GAS_PRICE,
     HP_ETA_CARNOT, HP_APPROACH_K, compCopFor, compSupplyTemp,
     setTables, validateScene, recoveredHeatKw, scaleBand, scaleMultiplier,
     absCoolCop, stage1, buildMatrixV2, entropyWeights, combinedWeights,
@@ -1305,7 +1338,7 @@ let state = {
   /* 可调计价与季节参数（2026-09-27 做成界面参数）：
      电价 0.65 元/kWh = 自发自用替代购电；余电上网可调到 0.42 左右。
      供暖季等效小时默认 3,200 h（仅「供暖·热水」需求生效）。 */
-  price: 0.65, heatHours: 3200
+  price: 0.65, heatHours: 3200, gas: 98
 };
 
 function readInputs() {
@@ -1315,13 +1348,15 @@ function readInputs() {
   state.lam = +$("in-lam").value;
   if ($("in-price")) state.price = +$("in-price").value;
   if ($("in-heat-h")) state.heatHours = +$("in-heat-h").value;
+  if ($("in-gas")) state.gas = +$("in-gas").value;
   /* 把两个口径参数交给引擎（引擎内部所有电价与供暖小时都读它） */
-  eng.setPrices({ elec: state.price, heatingHours: state.heatHours });
+  eng.setPrices({ elec: state.price, heatingHours: state.heatHours, heatPrice: state.gas });
   $("v-t").textContent = state.t + " ℃"; $("v-f").textContent = state.f + " kg/s";
   $("v-dt").textContent = state.dT + " ℃"; $("v-h").textContent = state.hours + " h";
   $("v-lam").textContent = state.lam.toFixed(2);
   if ($("v-price")) $("v-price").textContent = state.price.toFixed(2) + " 元/kWh";
   if ($("v-heat-h")) $("v-heat-h").textContent = state.heatHours + " h";
+  if ($("v-gas")) $("v-gas").textContent = state.gas + " 元/GJ";
 }
 
 function buildScene(t, f, medium, dT, hours, demand, cont, drv, tDem) {
@@ -1970,7 +2005,7 @@ $("btn").addEventListener("click", calc);
 $("preset").addEventListener("change", fillPreset);
 $("cond-search").addEventListener("input", () => drawConds($("cond-search").value));
 [$("in-t"), $("in-f"), $("in-dt"), $("in-h"), $("in-lam"), $("medium"), $("demand"),
- $("in-price"), $("in-heat-h")].forEach((el) => {
+ $("in-price"), $("in-heat-h"), $("in-gas")].forEach((el) => {
   if (!el) return;
   el.addEventListener("input", readInputs);
   el.addEventListener("change", calc);
