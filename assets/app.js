@@ -152,6 +152,17 @@ window.WHENG = (function () {
      即用户填的 8,000 h 会被折算成 3,200 h，用户填更小的值则原样保留。 */
   const HEATING_SEASON_HOURS = 3200;
 
+  /* 可调参数（2026-09-27 做成界面参数，供"换地区/换计价方式"现场演示）。
+     默认值与出处见上；setPrices() 由界面调用，只影响之后的计算。 */
+  let PRICES = { elec: 0.65, heatingHours: HEATING_SEASON_HOURS };
+  function setPrices(p) {
+    if (!p) return;
+    if (p.elec > 0) PRICES.elec = Number(p.elec);
+    if (p.heatingHours > 0) PRICES.heatingHours = Number(p.heatingHours);
+  }
+  function elecPrice() { return PRICES.elec; }
+  function heatingHoursCap() { return PRICES.heatingHours; }
+
   /* 经济性标定状态。为什么要分级：台账 §5 自己写明——
      直接换热/余热锅炉的投资回收期是"工程估算"，储热/TEG 是"示意"。
      这类数字不该决定排序，所以在 TOPSIS 里按中性计入（不奖不罚），
@@ -220,9 +231,9 @@ window.WHENG = (function () {
        原值存进 年运行小时_原值，便于界面说明"表里用的是折算后的小时数"。 */
     if (s["需求"] === "供暖·热水") {
       const h0 = Number(s["年运行小时"]);
-      if (h0 > HEATING_SEASON_HOURS) {
+      if (h0 > heatingHoursCap()) {
         s["年运行小时_原值"] = h0;
-        s["年运行小时"] = HEATING_SEASON_HOURS;
+        s["年运行小时"] = heatingHoursCap();
       }
     }
     return { ok: true, scene: s };
@@ -309,12 +320,12 @@ window.WHENG = (function () {
   /* 年产出价值（万元 / MW装机·年）。口径见 ECON_GRADE 上方说明。 */
   function annualValueWanMw(path, hours) {
     if (path === "orc" || path === "steam_pp" || path === "teg") {
-      return hours * ELEC_PRICE * 1000.0 / 10000.0;                 // 每 MW 电装机
+      return hours * elecPrice() * 1000.0 / 10000.0;                 // 每 MW 电装机
     }
     // 制冷类（吸收式与电压缩）：产出是冷量，价值按"替代电制冷的电耗"算，
     // 与减排列 coolingAbsReduction 的口径一致（Q_cold ÷ COP_E × 电价）。
     if (path === "comp_cool" || path === "abs_cool") {
-      return (1.0 / COP_E_COOL) * hours * ELEC_PRICE * 1000.0 / 10000.0;  // 替代电制冷耗电
+      return (1.0 / COP_E_COOL) * hours * elecPrice() * 1000.0 / 10000.0;  // 替代电制冷耗电
     }
     // 其余为产热路径：每 MW 热装机 × 小时 = MWh → GJ → 替代天然气
     return hours * 3.6 * GAS_PRICE / 10000.0;
@@ -323,10 +334,10 @@ window.WHENG = (function () {
   /* 年能耗成本（万元 / MW装机·年）：只对"自己要耗电/耗汽"的路径非零 */
   function energyCostWanMw(path, hours, compCop) {
     if (path === "comp") {
-      return (1.0 / (compCop || HP_COP)) * hours * ELEC_PRICE * 1000.0 / 10000.0;
+      return (1.0 / (compCop || HP_COP)) * hours * elecPrice() * 1000.0 / 10000.0;
     }
     if (path === "comp_cool") {
-      return (1.0 / COP_E_COOL) * hours * ELEC_PRICE * 1000.0 / 10000.0;
+      return (1.0 / COP_E_COOL) * hours * elecPrice() * 1000.0 / 10000.0;
     }
     if (path === "abs_ext") {
       return (1.0 / COP_H_ABS_EXT) * hours * 3.6 * STEAM_PRICE / 10000.0 * STEAM_OPS_FACTOR;
@@ -533,7 +544,7 @@ window.WHENG = (function () {
   }
 
   function compCoolOpexWanMw(scene) {
-    return (1.0 / COP_E_COOL) * Number(scene["年运行小时"]) * ELEC_PRICE * 1000.0 / 10000.0;
+    return (1.0 / COP_E_COOL) * Number(scene["年运行小时"]) * elecPrice() * 1000.0 / 10000.0;
   }
 
   function compReduction(scene, cop) {
@@ -622,7 +633,7 @@ window.WHENG = (function () {
       } else if (p === "comp") {
         X[i][3] = pyRound(compReduction(scene, compCop), 1);
         /* 运行成本＝自耗电成本，用电耗率 1/COP 算（原来是写死的 0.357，对应 COP2.8） */
-        X[i][5] = pyRound((1.0 / (compCop || HP_COP)) * hours * ELEC_PRICE * 1000 / 10000, 1);
+        X[i][5] = pyRound((1.0 / (compCop || HP_COP)) * hours * elecPrice() * 1000 / 10000, 1);
       } else if (["direct", "whb_steam", "tc_storage", "pcm_storage"].indexOf(p) >= 0) {
         X[i][3] = pyRound(heatRedGas(scene), 1);
       }
@@ -828,7 +839,7 @@ window.WHENG = (function () {
     const p50 = row[2];
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
-    return { q, p10: row[1], p50, p90: row[3], n: row[4], net, mwh, co2: mwh * GRID_EF, money: mwh * 1000 * ELEC_PRICE / 10000 };
+    return { q, p10: row[1], p50, p90: row[3], n: row[4], net, mwh, co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
   }
 
   function steamDetail(tSrc, mDot, medium, hours, dT) {
@@ -838,7 +849,7 @@ window.WHENG = (function () {
     const p50 = steamEffPct(tSrc) * 10.0;
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
-    return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null, n: row ? row[4] : null, net, mwh, co2: mwh * GRID_EF, money: mwh * 1000 * ELEC_PRICE / 10000 };
+    return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null, n: row ? row[4] : null, net, mwh, co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
   }
 
   function heatDetail(mDot, medium, tSrc, hours, dT, cop) {
@@ -849,7 +860,7 @@ window.WHENG = (function () {
     if (cop) {
       const mwhE = heatGj / 3.6 / cop;
       const co2E = mwhE * GRID_EF;
-      return { q, heatGj, co2: Math.max(replaced - co2E, 0), money: (heatGj * GAS_PRICE - mwhE * 1000 * ELEC_PRICE) / 10000 };
+      return { q, heatGj, co2: Math.max(replaced - co2E, 0), money: (heatGj * GAS_PRICE - mwhE * 1000 * elecPrice()) / 10000 };
     }
     return { q, heatGj, co2: replaced, money: heatGj * GAS_PRICE / 10000 };
   }
@@ -857,6 +868,7 @@ window.WHENG = (function () {
   return {
     PATH_KEYS, DISPLAY, INDICATORS, DIRECTIONS, CP, BASE_INDICATORS,
     ABS_COOL_T_MIN, COP_C_ABS, COP_E_COOL, GRID_EF, ELEC_PRICE, HP_COP,
+    setPrices, elecPrice, heatingHoursCap, HEATING_SEASON_HOURS,
     HP_ETA_CARNOT, HP_APPROACH_K, compCopFor, compSupplyTemp,
     setTables, validateScene, recoveredHeatKw, scaleBand, scaleMultiplier,
     absCoolCop, stage1, buildMatrixV2, entropyWeights, combinedWeights,
@@ -1273,7 +1285,11 @@ let state = {
   /* 需求温度（℃）：供暖/热水与干燥场景下，"直接换热是否可行"由它决定
      （下限 = max(60, 需求温度 + 端差)）。工况库里有出处的行会带值，
      其余为 null → 引擎按 60℃(供热)/100℃(干燥) 默认值处理。 */
-  tDem: null
+  tDem: null,
+  /* 可调计价与季节参数（2026-09-27 做成界面参数）：
+     电价 0.65 元/kWh = 自发自用替代购电；余电上网可调到 0.42 左右。
+     供暖季等效小时默认 3,200 h（仅「供暖·热水」需求生效）。 */
+  price: 0.65, heatHours: 3200
 };
 
 function readInputs() {
@@ -1281,9 +1297,15 @@ function readInputs() {
   state.medium = $("medium").value; state.dT = +$("in-dt").value;
   state.hours = +$("in-h").value; state.demand = $("demand").value;
   state.lam = +$("in-lam").value;
+  if ($("in-price")) state.price = +$("in-price").value;
+  if ($("in-heat-h")) state.heatHours = +$("in-heat-h").value;
+  /* 把两个口径参数交给引擎（引擎内部所有电价与供暖小时都读它） */
+  eng.setPrices({ elec: state.price, heatingHours: state.heatHours });
   $("v-t").textContent = state.t + " ℃"; $("v-f").textContent = state.f + " kg/s";
   $("v-dt").textContent = state.dT + " ℃"; $("v-h").textContent = state.hours + " h";
   $("v-lam").textContent = state.lam.toFixed(2);
+  if ($("v-price")) $("v-price").textContent = state.price.toFixed(2) + " 元/kWh";
+  if ($("v-heat-h")) $("v-heat-h").textContent = state.heatHours + " h";
 }
 
 function buildScene(t, f, medium, dT, hours, demand, cont, drv, tDem) {
@@ -1931,7 +1953,9 @@ document.querySelectorAll(".chips .chip[data-drv]").forEach((c) => c.addEventLis
 $("btn").addEventListener("click", calc);
 $("preset").addEventListener("change", fillPreset);
 $("cond-search").addEventListener("input", () => drawConds($("cond-search").value));
-[$("in-t"), $("in-f"), $("in-dt"), $("in-h"), $("in-lam"), $("medium"), $("demand")].forEach((el) => {
+[$("in-t"), $("in-f"), $("in-dt"), $("in-h"), $("in-lam"), $("medium"), $("demand"),
+ $("in-price"), $("in-heat-h")].forEach((el) => {
+  if (!el) return;
   el.addEventListener("input", readInputs);
   el.addEventListener("change", calc);
 });
