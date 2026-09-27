@@ -33,7 +33,10 @@
           <div class="field"><label>换热端差 <b id="v-dt">10 ℃</b></label>
             <input type="range" id="in-dt" min="5" max="20" step="1" value="10"></div>
           <div class="field"><label>年运行小时 <b id="v-h">8000 h</b></label>
-            <input type="range" id="in-h" min="1000" max="8760" step="500" value="8000"></div>
+            <input type="range" id="in-h" min="1000" max="8760" step="500" value="7000">
+            <div class="note small">默认由 8000 下调为 <b>7000 h</b>：第五轮实测——开山多个工业项目
+              6148~8352 h（含检修）、Ormat 机队容量系数 70%（≈6132 h）、印度水泥余热发电容量因子 ~74%（≈6480 h）；
+              而设计/示范口径普遍写 7500~8000 h。<b>8000 h 是设计上界，不是实测均值</b></div></div>
           <div class="field"><label>电价口径 <b id="v-price">0.65 元/kWh</b></label>
             <input type="range" id="in-price" min="0.30" max="0.80" step="0.01" value="0.68">
             <div class="note small">自用替代购电默认 0.68＝9 省官方代理购电到户电价的中位（浙江 0.6101、湖北 0.6273、
