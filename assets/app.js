@@ -65,8 +65,13 @@ window.WHENG = (function () {
     tc_storage: [70, 900, 10.0, 0, 3, 28],
     pcm_storage: [75, 600, 8.0, 0, 3, 25],
     teg: [5, 1500, 12.0, 0, 2, 8],
-    abs_cool: [70, 100, 5.5, 0, 4, 3],
-    comp_cool: [190, 60, 4.2, 0, 3, 104]
+    /* 制冷两条的投资基值已于 2026-09-27 换成有出处的锚点（原来是无出处常数）：
+       溴化锂吸收式制冷机 1944 元/kW、螺杆式电制冷机 1512 元/kW
+       （《溴化锂吸收式制冷机与电制冷空调机组的比较》，百度文库，
+       制冷系统费用口径；电力增容另计：吸收式 5~10、螺杆 103~206 元/kW）。
+       来源检索记录见 docs\2026-09-27-造价锚点补充检索.md */
+    abs_cool: [70, 194, 5.5, 0, 4, 3],
+    comp_cool: [190, 151, 4.2, 0, 3, 104]
   };
 
   const SCALE_REP_KW = { "小": 500.0, "中": 3000.0, "大": 10000.0 };
@@ -97,9 +102,12 @@ window.WHENG = (function () {
     orc: "sourced",        // 公式现算 5.60 年，与台账引文（重庆大学学报 2019：5.58 年）吻合
     steam_pp: "sourced",   // 公式现算；水泥窑行业典型 2~3 年（见文档说明）
     abs_ext: "sourced",    // 哈石化"余热暖民"真实工程：174 万元/MW、回收期 4.2 年
+    abs_cool: "sourced",   // 投资锚点：溴化锂机组 1944 元/kW（2026-09-27 补检索）；
+                           // 回收期由公式现算（省电价值 − 运维）
     comp: "pending",       // 投资=工程估算；回收期=另一文献，两者不可比
     abs_self: "pending",   // 投资按 10MW 级折算、回收期来自另一文献
-    comp_cool: "pending",
+    comp_cool: "pending",  // 投资已换成螺杆机组锚点 1512 元/kW，但它是"电驱动基准"路径、
+                           // 不构成改造投资回收问题，故回收期不做现算
     direct: "pending",     // 台账 §5："工程估算"
     whb_steam: "pending",
     tc_storage: "pending", // 台账 §5："示意"
@@ -184,7 +192,9 @@ window.WHENG = (function () {
     if (path === "orc" || path === "steam_pp" || path === "teg") {
       return hours * ELEC_PRICE * 1000.0 / 10000.0;                 // 每 MW 电装机
     }
-    if (path === "comp_cool") {
+    // 制冷类（吸收式与电压缩）：产出是冷量，价值按"替代电制冷的电耗"算，
+    // 与减排列 coolingAbsReduction 的口径一致（Q_cold ÷ COP_E × 电价）。
+    if (path === "comp_cool" || path === "abs_cool") {
       return (1.0 / COP_E_COOL) * hours * ELEC_PRICE * 1000.0 / 10000.0;  // 替代电制冷耗电
     }
     // 其余为产热路径：每 MW 热装机 × 小时 = MWh → GJ → 替代天然气
