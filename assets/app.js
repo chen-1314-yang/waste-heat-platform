@@ -45,7 +45,13 @@ window.WHENG = (function () {
   const UNSUPPORTED_DEMAND = ["除湿", "除湿/干燥"];
   const CP = { "烟气": 1.1, "热水·冷凝水": 4.2, "工艺液体": 2.5 };
 
-  const INDICATORS = ["能效%", "投资万元/MW", "回收期年", "CO2减排t/年", "政策分", "运行成本万元/MW·年"];
+  /* 口径（2026-09-27 体检后写明）：
+     能效% —— 各路径含义不同：发电类=热效率、热泵类=COP×100 或一次能源效率、
+              直换/锅炉/储热=产出比。台账 §5 已声明"同列比较仅为决策演示"。
+     投资  —— 单位是「每 MW 该路径自身的装机产出」（发电=每 MW 电装机、
+              产热=每 MW 热装机、制冷=每 MW 冷装机），依据台账 §4 引文
+              （ORC 23800 元/kW 装机）。规模修正也按同一容量分档。 */
+  const INDICATORS = ["能效%", "投资万元/MW装机", "回收期年", "CO2减排t/年", "政策分", "运行成本万元/MW·年"];
   const DIRECTIONS = ["max", "min", "min", "max", "max", "min"];
 
   const BASE_INDICATORS = {
@@ -136,6 +142,16 @@ window.WHENG = (function () {
     const rep = SCALE_REP_KW[band];
     const n = SCALE_EXP[path] !== undefined ? SCALE_EXP[path] : SCALE_EXP_DEFAULT;
     return Math.pow(rep / 3000.0, n - 1.0);
+  }
+
+  /* 该路径的"装机产出容量"kW —— 投资列的单位是「每 MW 装机产出」，
+     所以规模分档必须用这个量，不能一律用可回收热量。
+     发电类：热效率 × 回收热 = 电装机；直换/锅炉/储热/吸收式：能效列就是产出比；
+     压缩式热泵与电压缩制冷另按 COP 折（它们的能效列是一次能源效率，不是 COP）。 */
+  function capacityKw(path, q, effPct) {
+    if (path === "comp") return q * HP_COP;
+    if (path === "comp_cool") return q * COP_E_COOL;
+    return q * effPct / 100.0;
   }
 
   function absCoolCop(t) {
@@ -325,15 +341,12 @@ window.WHENG = (function () {
   function buildMatrixV2(survivors, scene) {
     const X = survivors.map((p) => BASE_INDICATORS[p].slice());
     const q = recoveredHeatKw(scene);
-    const band = scaleBand(q);
     const hours = Number(scene["年运行小时"]);
     const demand = scene["需求"];
     for (let i = 0; i < survivors.length; i++) {
       const p = survivors[i];
-      const sf = scaleMultiplier(p, band);
-      X[i][1] = BASE_INDICATORS[p][1] * sf;
-      X[i][2] = BASE_INDICATORS[p][2] * sf;
-      X[i][5] = BASE_INDICATORS[p][5] * (p === "comp" ? 1.0 : sf);
+
+      // ---- 第 1 步：先定能效（装机容量要用它，所以顺序不能颠倒）----
       if (p === "orc") {
         const e = orcEffPct(Number(scene["热源温度_degC"]), Number(scene["换热端差_degC"]));
         if (e) X[i][0] = pyRound(e, 2);
@@ -343,18 +356,36 @@ window.WHENG = (function () {
       } else if (p === "abs_self") {
         const cop = demand === "工艺蒸汽" ? COP_II_ABS_SELF : COP_I_ABS_SELF;
         X[i][0] = pyRound(cop * 100.0, 2);
-        const redFactor = demand === "工艺蒸汽" ? COP_II_ABS_SELF : 1.0;
-        X[i][3] = pyRound(heatRedGas(scene) * redFactor, 1);
       } else if (p === "abs_ext") {
         X[i][0] = pyRound(COP_H_ABS_EXT * 100.0, 2);
-        X[i][3] = pyRound(steamDrivenAbsReduction(scene), 1);
-        X[i][5] = pyRound(steamDrivenAbsOpexWanMw(scene), 1);
       } else if (p === "abs_cool") {
         const cop = absCoolCop(Number(scene["热源温度_degC"])) || COP_C_ABS;
         X[i][0] = pyRound(cop * 100.0, 2);
-        X[i][3] = pyRound(coolingAbsReduction(scene), 1);
       } else if (p === "comp_cool") {
         X[i][0] = pyRound(COP_E_COOL * 0.38 * 100.0, 2);
+      }
+
+      // ---- 第 2 步：规模档按"该路径自己的装机产出"定，不再一律按可回收热 ----
+      // 投资列的单位是"每 MW 装机产出"（台账 §4 引文：ORC 23800 元/kW 装机），
+      // 所以规模分档也必须用同一个量。以前用可回收热量分档，等于给发电类
+      // 路径多打了一次折扣（ORC 约 0.83 倍、蒸汽朗肯约 0.70 倍）。
+      // 2026-09-27 证据链体检 B2 项。
+      const cap = capacityKw(p, q, X[i][0]);
+      const sf = scaleMultiplier(p, scaleBand(cap));
+      X[i][1] = BASE_INDICATORS[p][1] * sf;
+      X[i][2] = BASE_INDICATORS[p][2] * sf;
+      X[i][5] = BASE_INDICATORS[p][5] * (p === "comp" ? 1.0 : sf);
+
+      // ---- 第 3 步：减排与运行成本的动态覆盖（公式与原实现一致）----
+      if (p === "abs_self") {
+        const redFactor = demand === "工艺蒸汽" ? COP_II_ABS_SELF : 1.0;
+        X[i][3] = pyRound(heatRedGas(scene) * redFactor, 1);
+      } else if (p === "abs_ext") {
+        X[i][3] = pyRound(steamDrivenAbsReduction(scene), 1);
+        X[i][5] = pyRound(steamDrivenAbsOpexWanMw(scene), 1);
+      } else if (p === "abs_cool") {
+        X[i][3] = pyRound(coolingAbsReduction(scene), 1);
+      } else if (p === "comp_cool") {
         X[i][3] = 0.0;
         X[i][5] = pyRound(compCoolOpexWanMw(scene), 1);
       } else if (p === "comp") {
@@ -937,6 +968,24 @@ window.HFDATA.orcPctSource = "CoolProp-按温度档中位数";
     }
   });
 
+  /* 第 14 列：需求温度（℃）。
+     为什么要补这一列：供暖/热水与干燥两个需求下，"直接换热是否可行"完全由
+     需求温度决定（下限 = max(60, 需求温度 + 端差)）。以前这一列不存在，
+     引擎一律退回代码里的 60℃ 默认值，用户看不到、也改不了。
+
+     后果实例（2026-09-27 证据链体检）：工况库"数据中心-冷却水回水 70℃"
+     在网站上推荐"直接换热"，而项目案例回测（case_benchmark.py Case1，
+     依据 ORNL 报告）用需求 85℃、结论是"压缩式热泵"——同一个案例两个答案。
+
+     取值原则：只写有出处的值；没有依据的一律留 null，让引擎默认值生效，
+     默认值本身写在边界与口径页里（不再藏在代码里）。 */
+  var DEMAND_TEMP_C = {
+    13: 85   // ORNL 数据中心案例：制 85℃ 热水（case_benchmark.py Case1 输入）
+  };
+  D.conds.forEach(function (row, i) {
+    row[13] = DEMAND_TEMP_C[i] !== undefined ? DEMAND_TEMP_C[i] : null;
+  });
+
   if (D.meta) { D.meta.condsPatched = patched; }
 })();
 
@@ -961,7 +1010,11 @@ const num = (x, d = 0) => (x === null || x === undefined || isNaN(x)) ? "—" :
 
 let state = {
   t: 120, f: 50, medium: "热水/冷凝水", dT: 10, hours: 8000,
-  demand: "发电", cont: "连续", drv: "余热自驱动", lam: 0.5
+  demand: "发电", cont: "连续", drv: "余热自驱动", lam: 0.5,
+  /* 需求温度（℃）：供暖/热水与干燥场景下，"直接换热是否可行"由它决定
+     （下限 = max(60, 需求温度 + 端差)）。工况库里有出处的行会带值，
+     其余为 null → 引擎按 60℃(供热)/100℃(干燥) 默认值处理。 */
+  tDem: null
 };
 
 function readInputs() {
@@ -974,17 +1027,18 @@ function readInputs() {
   $("v-lam").textContent = state.lam.toFixed(2);
 }
 
-function buildScene(t, f, medium, dT, hours, demand, cont, drv) {
+function buildScene(t, f, medium, dT, hours, demand, cont, drv, tDem) {
   return {
     "需求": DEMAND_MAP[demand],
     "热源温度_degC": t, "载体": MEDIUM_MAP[medium], "流量_kg_s": f,
-    "换热端差_degC": dT, "年运行小时": hours, "连续性": cont, "驱动来源": drv
+    "换热端差_degC": dT, "年运行小时": hours, "连续性": cont, "驱动来源": drv,
+    "需求温度_degC": (tDem === undefined ? null : tDem)
   };
 }
 
 function currentScene() {
   return buildScene(state.t, state.f, state.medium, state.dT, state.hours,
-    state.demand, state.cont, state.drv);
+    state.demand, state.cont, state.drv, state.tDem);
 }
 
 /* ---------------- 渲染 ---------------- */
@@ -1071,11 +1125,14 @@ function renderTop(res) {
   if (top === "orc") {
     const d = eng.orcDetail(t, f, medCore, hours, dT);
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
-    sub = `ORC 净功率 P50 ${num(d.p50, 1)} kW/MW热（P10 ${num(d.p10, 1)}~P90 ${num(d.p90, 1)}，${num(d.n, 0)} 工况）· 实际回收 ${num(d.q, 0)} kW`;
+    sub = `ORC 净功率 P50 ${num(d.p50, 1)} kW/MW热（P10 ${num(d.p10, 1)}~P90 ${num(d.p90, 1)}，${num(d.n, 0)} 工况）· 实际回收 ${num(d.q, 0)} kW` +
+      ` · 口径：按蒸发器出口温度档的**中位设计**；帕累托**最优设计**点可达 150.5 kW/MW热（15.1%），` +
+      `申报书 11.0~15.1% 指的是后者`;
   } else if (top === "steam_pp") {
     const d = eng.steamDetail(t, f, medCore, hours, dT);
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
-    sub = `蒸汽朗肯净功率 ${num(d.p50, 1)} kW/MW热 · 实际回收 ${num(d.q, 0)} kW`;
+    sub = `蒸汽朗肯净功率 ${num(d.p50, 1)} kW/MW热 · 实际回收 ${num(d.q, 0)} kW` +
+      ` · 口径：锅炉出口温度点中位曲线（与内核 steam_eff_median_pct 同口径）`;
   } else if (top === "teg") {
     const q = eng.recoveredHeatKw(currentScene());
     s1v = num(q, 0); co2 = 0; money = 0; s2v = "—";
@@ -1441,7 +1498,7 @@ function svgPareto(el, points, line, extra, xlab, ylab, cur) {
 function currentPerMW() {
   readInputs();
   const med = MEDIUM_MAP[state.medium];
-  const scene = buildScene(state.t, state.f, state.medium, state.dT, 8000, state.demand, state.cont, state.drv);
+  const scene = buildScene(state.t, state.f, state.medium, state.dT, 8000, state.demand, state.cont, state.drv, state.tDem);
   let orc = null, steam = null;
   if (state.t >= 110 && state.t <= 350) {
     const o = eng.orcDetail(state.t, state.f, MEDIUM_MAP[state.medium], 8000, state.dT);
@@ -1513,7 +1570,9 @@ function drawConds(filter) {
   $("t-conds").innerHTML = "<tr><th>工况名称</th><th>行业</th><th>热源类型</th><th>温度℃</th><th>流量kg/s</th><th>需求</th><th>连续性</th><th>数据来源</th></tr>" +
     rows.map((r, ri) => {
       const i = D.conds.indexOf(r);
-      return `<tr class="cond-row" data-i="${i}"><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[9]}</td><td>${r[10]}</td><td>${r[11]}</td></tr>`;
+    const dem = r[9] + ((r[13] !== null && r[13] !== undefined)
+      ? `（需求 ${r[13]}℃）` : "");
+    return `<tr class="cond-row" data-i="${i}"><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${dem}</td><td>${r[10]}</td><td>${r[11]}</td></tr>`;
     }).join("");
   document.querySelectorAll("#t-conds .cond-row").forEach((el) => {
     el.addEventListener("click", () => loadCond(+el.dataset.i));
@@ -1523,6 +1582,8 @@ function drawConds(filter) {
 function applyCondToUi(r) {
   $("in-t").value = r[3]; $("in-f").value = r[4]; $("demand").value = r[9];
   $("in-h").value = r[8] || 8000;
+  /* 第 14 列 = 需求温度；没有值的行设为 null，交给引擎默认值 */
+  state.tDem = (r.length > 13 && r[13] !== null && r[13] !== undefined) ? r[13] : null;
   const med = mediumFromType(r[2]);
   $("medium").value = med;
   document.querySelectorAll(".chips .chip[data-c]").forEach((c) => c.classList.toggle("active", c.dataset.c === r[10]));
