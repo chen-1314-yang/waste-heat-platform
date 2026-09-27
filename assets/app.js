@@ -188,16 +188,23 @@ window.WHENG = (function () {
      2024 行业市场均价 39.7 元/GJ —— 两者差 2.5 倍，直接决定产汽路径的回收期
      （余热锅炉按 98 算 0.6 年、按 40 算约 1.7 年）。
      因此不硬改默认值，而是做成可调参数，并在边界页写明敏感性。 */
-  let PRICES = { elec: 0.65, heatingHours: HEATING_SEASON_HOURS, heatPrice: 98.0 };
+  /* valleyElec（元/kWh）：谷段电价，用于电蓄热类储热路径的充电成本。
+     依据：第三轮检索拿到分省峰谷电价——山东 2025-04 一般工商业 35 kV：
+     深谷 0.25、低谷 0.35、平 0.71、高峰 1.00、尖峰 1.20 元/kWh（尖峰−深谷 0.95）。
+     取低谷 0.35 作为默认充电电价。 */
+  let PRICES = { elec: 0.65, heatingHours: HEATING_SEASON_HOURS,
+                 heatPrice: 98.0, valleyElec: 0.35 };
   function setPrices(p) {
     if (!p) return;
     if (p.elec > 0) PRICES.elec = Number(p.elec);
     if (p.heatingHours > 0) PRICES.heatingHours = Number(p.heatingHours);
     if (p.heatPrice > 0) PRICES.heatPrice = Number(p.heatPrice);
+    if (p.valleyElec > 0) PRICES.valleyElec = Number(p.valleyElec);
   }
   function elecPrice() { return PRICES.elec; }
   function heatingHoursCap() { return PRICES.heatingHours; }
   function heatPrice() { return PRICES.heatPrice; }
+  function valleyElec() { return PRICES.valleyElec; }
 
   /* 经济性标定状态。为什么要分级：台账 §5 自己写明——
      直接换热/余热锅炉的投资回收期是"工程估算"，储热/TEG 是"示意"。
@@ -399,6 +406,15 @@ window.WHENG = (function () {
     }
     if (path === "abs_ext") {
       return (1.0 / COP_H_ABS_EXT) * hours * 3.6 * STEAM_PRICE / 10000.0 * STEAM_OPS_FACTOR;
+    }
+    /* 储热类：按"谷电充电"算充电成本（2026-09-27）。
+       口径：每 MW 装机的年放电热量 ÷ 储放热效率 = 年充电量；× 谷段电价 0.35 元/kWh。
+       依据：工况库"储热调峰-高温熔盐"一行标注为「谷电充热」，故成本侧应计电费；
+       谷电价取山东 2025-04 一般工商业 35 kV 低谷 0.35 元/kWh（第三轮检索）。
+       注：若某项目是"余热直接充热"（不耗电），应把谷电价调到接近 0 再评估。 */
+    if (path === "tc_storage" || path === "pcm_storage") {
+      const eff = path === "tc_storage" ? 0.70 : 0.75;   // 与能效列的储放热效率一致
+      return (1.0 / eff) * hours * valleyElec() * 1000.0 / 10000.0;
     }
     return 0.0;
   }
@@ -700,6 +716,13 @@ window.WHENG = (function () {
         X[i][3] = pyRound(compReduction(scene, compCop), 1);
         /* 运行成本＝自耗电成本，用电耗率 1/COP 算（原来是写死的 0.357，对应 COP2.8） */
         X[i][5] = pyRound((1.0 / (compCop || HP_COP)) * hours * elecPrice() * 1000 / 10000, 1);
+      } else if (p === "tc_storage" || p === "pcm_storage") {
+        /* 储热类：运行成本改为按谷电充电成本现算（见 energyCostWanMw）
+           成本口径 2026-09-27：原来用工程估算常数（28 / 25 万元/MW·年）。
+           注意：本分支在下面的减排分支之前，必须同时补上减排列，
+           否则 else-if 链会让储热路径的减碳留在基准值 0（曾犯此错）。 */
+        X[i][5] = pyRound(energyCostWanMw(p, hours), 1);
+        X[i][3] = pyRound(heatRedGas(scene), 1);
       } else if (["direct", "whb_steam", "tc_storage", "pcm_storage"].indexOf(p) >= 0) {
         X[i][3] = pyRound(heatRedGas(scene), 1);
       }
