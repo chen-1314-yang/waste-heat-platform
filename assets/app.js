@@ -81,6 +81,31 @@ window.WHENG = (function () {
   const COP_E_COOL = 5.0;
   const STEAM_PRICE = 100.0;
   const STEAM_OPS_FACTOR = 1.03;
+  /* ---- 经济性口径（2026-09-27 定稿，对应证据链体检第 2 条）----
+     ELEC_PRICE 0.65 元/kWh 的口径是「自发自用、替代企业购电」，不是上网价
+     （上网价约 0.40 元/kWh）。若按余电上网计，必须显式改这个常数。
+     GAS_PRICE 98 元/GJ 的口径是「替代天然气」，台账 §3 已声明为演示价。
+     运维费率：发电/换热/储热 4%/年，热泵与制冷机组 5%/年（工程惯例）。 */
+  const OPEX_RATE = { comp: 0.05, comp_cool: 0.05, abs_self: 0.05, abs_ext: 0.05 };
+  const OPEX_RATE_DEFAULT = 0.04;
+
+  /* 经济性标定状态。为什么要分级：台账 §5 自己写明——
+     直接换热/余热锅炉的投资回收期是"工程估算"，储热/TEG 是"示意"。
+     这类数字不该决定排序，所以在 TOPSIS 里按中性计入（不奖不罚），
+     界面上也标出来。只有有可核对出处的路径才用统一公式现算。 */
+  const ECON_GRADE = {
+    orc: "sourced",        // 公式现算 5.60 年，与台账引文（重庆大学学报 2019：5.58 年）吻合
+    steam_pp: "sourced",   // 公式现算；水泥窑行业典型 2~3 年（见文档说明）
+    abs_ext: "sourced",    // 哈石化"余热暖民"真实工程：174 万元/MW、回收期 4.2 年
+    comp: "pending",       // 投资=工程估算；回收期=另一文献，两者不可比
+    abs_self: "pending",   // 投资按 10MW 级折算、回收期来自另一文献
+    comp_cool: "pending",
+    direct: "pending",     // 台账 §5："工程估算"
+    whb_steam: "pending",
+    tc_storage: "pending", // 台账 §5："示意"
+    pcm_storage: "pending",
+    teg: "pending"
+  };
   const GRID_EF = 0.581;
   const GAS_EF = 0.0561;
   const BOILER_EFF = 0.90;
@@ -152,6 +177,45 @@ window.WHENG = (function () {
     if (path === "comp") return q * HP_COP;
     if (path === "comp_cool") return q * COP_E_COOL;
     return q * effPct / 100.0;
+  }
+
+  /* 年产出价值（万元 / MW装机·年）。口径见 ECON_GRADE 上方说明。 */
+  function annualValueWanMw(path, hours) {
+    if (path === "orc" || path === "steam_pp" || path === "teg") {
+      return hours * ELEC_PRICE * 1000.0 / 10000.0;                 // 每 MW 电装机
+    }
+    if (path === "comp_cool") {
+      return (1.0 / COP_E_COOL) * hours * ELEC_PRICE * 1000.0 / 10000.0;  // 替代电制冷耗电
+    }
+    // 其余为产热路径：每 MW 热装机 × 小时 = MWh → GJ → 替代天然气
+    return hours * 3.6 * GAS_PRICE / 10000.0;
+  }
+
+  /* 年能耗成本（万元 / MW装机·年）：只对"自己要耗电/耗汽"的路径非零 */
+  function energyCostWanMw(path, hours) {
+    if (path === "comp") {
+      return (1.0 / HP_COP) * hours * ELEC_PRICE * 1000.0 / 10000.0;
+    }
+    if (path === "comp_cool") {
+      return (1.0 / COP_E_COOL) * hours * ELEC_PRICE * 1000.0 / 10000.0;
+    }
+    if (path === "abs_ext") {
+      return (1.0 / COP_H_ABS_EXT) * hours * 3.6 * STEAM_PRICE / 10000.0 * STEAM_OPS_FACTOR;
+    }
+    return 0.0;
+  }
+
+  /* 回收期（年）= 投资 ÷ (年产出价值 − 年能耗 − 年运维)
+     运维 = 投资 × 费率。这个式子和 ORC 那一行是同一套：2380 ÷ (520 − 0 − 95.2) = 5.60 年，
+     与台账引文的 5.58 年吻合 —— 说明表里原本的 5.6 年就是这么算的，
+     所以我们只是把它显式化并对其它有出处的路径统一应用。 */
+  function paybackYears(path, investWanMw, hours) {
+    const rate = OPEX_RATE[path] !== undefined ? OPEX_RATE[path] : OPEX_RATE_DEFAULT;
+    const net = annualValueWanMw(path, hours)
+      - energyCostWanMw(path, hours)
+      - investWanMw * rate;
+    if (!(net > 0)) return null;
+    return investWanMw / net;
   }
 
   function absCoolCop(t) {
@@ -375,6 +439,12 @@ window.WHENG = (function () {
       X[i][1] = BASE_INDICATORS[p][1] * sf;
       X[i][2] = BASE_INDICATORS[p][2] * sf;
       X[i][5] = BASE_INDICATORS[p][5] * (p === "comp" ? 1.0 : sf);
+      // 有出处的路径：回收期改成公式现算（见 paybackYears）。
+      // 无出处的路径保留工程估算/示意值，但那个值只用于展示，不参与排序。
+      if (ECON_GRADE[p] === "sourced") {
+        const pb = paybackYears(p, X[i][1], hours);
+        if (pb !== null) X[i][2] = pyRound(pb, 2);
+      }
 
       // ---- 第 3 步：减排与运行成本的动态覆盖（公式与原实现一致）----
       if (p === "abs_self") {
@@ -486,8 +556,33 @@ window.WHENG = (function () {
       return { out_of_scope: true, message: msg, warnings: [msg], keys: [], labels: [], X: null, scene: s };
     }
     const X = buildMatrixV2(keys, s);
-    const w = combinedWeights(lam, X, meta);
-    const c = topsis(X, w);
+
+    /* 排序用的矩阵与展示用的矩阵分开：
+       展示用 X（含各路径自己的工程估算值）；
+       排序用 Xrank —— 把"经济性待标定"路径的投资/回收期换成有出处路径的中位数，
+       让没有出处的数字既不奖也不罚（证据链体检第 2 条）。
+       有出处路径一个都没有时整列不动，避免把中位数做成常数。 */
+    const Xrank = X.map((r) => r.slice());
+    const srcIdx = keys.map((p, k) => (ECON_GRADE[p] === "sourced" ? k : -1))
+      .filter((k) => k >= 0);
+    /* 只在"候选里确实有有出处路径"时才做中性替换。
+       为什么不无条件做：2026-09-27 实测过无条件版本 —— 数据中心供暖场景的候选
+       （直接换热/压缩式热泵/储热×2）全部是工程估算，把经济性两列压平后，
+       剩下能效/减碳/政策分/运行成本决定排序，结果反过来推荐"相变储热"，
+       与真实工程（热泵）矛盾。说明经济性准则在这种场景里无法被其它准则替代，
+       所以宁可保留工程估算值并在界面上标明"待标定"，也不强行剔除。 */
+    if (srcIdx.length) {
+      [1, 2].forEach((j) => {
+        const vals = srcIdx.map((k) => X[k][j]).sort((a, b) => a - b);
+        const med = vals[Math.floor(vals.length / 2)];
+        keys.forEach((p, k) => {
+          if (ECON_GRADE[p] !== "sourced") Xrank[k][j] = med;
+        });
+      });
+    }
+
+    const w = combinedWeights(lam, Xrank, meta);
+    const c = topsis(Xrank, w);
     const order = keys.map((p, i) => ({ path: p, closeness: pyRound(c[i], 4), row: X[i] }))
       .sort((a, b) => b.closeness - a.closeness);
     const warnings = [];
@@ -499,6 +594,7 @@ window.WHENG = (function () {
     return {
       out_of_scope: false, message: "", warnings,
       keys, labels: keys.map((p) => DISPLAY[p]), X, scene: s,
+      econGrade: keys.map((p) => ECON_GRADE[p] || "pending"),
       order, top: order[0].path, topLabel: DISPLAY[order[0].path],
       weights: w
     };
@@ -1061,15 +1157,31 @@ function renderTopsis(res) {
   }
   const head = "<tr><th>排名</th><th>路径</th>" + eng.INDICATORS.map((h) => `<th>${h}</th>`).join("") +
     "<th>TOPSIS 贴近度</th></tr>";
-  const body = res.order.map((o, i) =>
+  const body = res.order.map((o, i) => {
+    /* 经济性待标定的路径：投资/回收期两个格子打 * 号。
+       这些值本来就没有可比的公开造价（台账 §5 标"工程估算/示意"），
+       用 * 号标出来，避免读者把它当成可核对的数字。 */
+    const gi = res.keys ? res.keys.indexOf(o.path) : -1;
+    const pending = !res.econGrade || res.econGrade[gi] !== "sourced";
+    return (
     `<tr class="${i === 0 ? "best" : ""}"><td>${i + 1}</td><td>${eng.DISPLAY[o.path]}</td>` +
     o.row.map((v, j) => {
       if (j === 3) return `<td>${v > 0 ? num(v, 1) : "—"}</td>`;
-      if (j === 1 || j === 2) return `<td>${num(v, 2)}</td>`;
+      if (j === 1 || j === 2) {
+        return `<td>${num(v, 2)}${pending
+          ? '<sup title="经济性待标定：无可比公开造价，此处为工程估算值，排序中已按中性处理（仅当候选里有可核对路径时）">*</sup>'
+          : ""}</td>`;
+      }
       if (j === 5) return `<td>${num(v, 1)}</td>`;
       return `<td>${num(v, 2)}</td>`;
-    }).join("") + `<td>${o.closeness.toFixed(4)}</td></tr>`).join("");
-  $("t-topsis").innerHTML = head + body;
+    }).join("") + `<td>${o.closeness.toFixed(4)}</td></tr>`);
+  }).join("");
+  const foot = "<tr><td colspan=\"9\" class=\"small\">" +
+    "* 经济性待标定：该路径的投资/回收期没有可比的公开造价（数据来源台账 §5 标为「工程估算/示意」），" +
+    "只有 ORC、蒸汽朗肯与吸收式（外购蒸汽，哈石化真实工程）三条有可核对出处，它们的回收期按「" +
+    "投资 ÷ (年产出价值 − 能耗 − 运维)」现算。详见「边界与口径」页。" +
+    "</td></tr>";
+  $("t-topsis").innerHTML = head + body + foot;
   drawLam(res);
 }
 
