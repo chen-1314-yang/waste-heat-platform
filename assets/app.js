@@ -251,10 +251,59 @@ window.WHENG = (function () {
      所以规模分档必须用这个量，不能一律用可回收热量。
      发电类：热效率 × 回收热 = 电装机；直换/锅炉/储热/吸收式：能效列就是产出比；
      压缩式热泵与电压缩制冷另按 COP 折（它们的能效列是一次能源效率，不是 COP）。 */
-  function capacityKw(path, q, effPct) {
-    if (path === "comp") return q * HP_COP;
+  function capacityKw(path, q, effPct, compCop) {
+    if (path === "comp") return q * (compCop || HP_COP);
     if (path === "comp_cool") return q * COP_E_COOL;
     return q * effPct / 100.0;
+  }
+
+  /* ---------------- 压缩式热泵 COP：由常数改为随温度计算（2026-09-27） ----------------
+
+     物理关系：COP = η × T_cond / (T_cond − T_evap)，温度用开尔文。
+     η 取 0.5，由两个真实案例反算（不是拍的）：
+       · 丹麦能源署工艺加热分册算例：热源 60℃ → 供汽 140℃（温升 80 K）、COP≈2.4
+         → 卡诺 5.16 → η = 0.465
+       · 珠海某产品样本：热源 65℃ → 出水 125℃、COP = 3.92
+         → 卡诺 6.64 → η = 0.59
+     端差各取 5 K：T_evap = 热源 − 5，T_cond = 需求温度 + 5。
+
+     若 T_cond ≤ T_evap + 2（即不需要提温），返回 null —— 此时应当用直接换热，
+     comp 不作为候选。否则会出现"不需要提温的热泵"这种无意义路径，
+     也会让 COP 趋于无穷。 */
+  const HP_ETA_CARNOT = 0.5;
+  const HP_APPROACH_K = 5.0;
+  /* 小温升时的上限保护。常系数 η 的卡诺外推在小温升处会过高：
+     例如热源 65℃→冷凝 90℃（温升 25 K）算得 COP 7.26，而工业热泵产品在这个
+     温升下的实测 COP 大约 4~5。两个标定点（ΔT=80K→η0.465、ΔT=60K→η0.59）
+     不足以拟合小温升趋势，故设上限 6.0 —— **这是工程判断，不是文献值**，
+     已在边界页登记：拿到一个"小温升（20~30 K）实测 COP"的真实机型数据后即可替换。 */
+  const HP_COP_MAX = 6.0;
+
+  /* 热泵要送到的温度：按需求类型给默认值（与 stage1 里各需求的默认温度一致） */
+  function compSupplyTemp(scene) {
+    const demand = scene["需求"];
+    const tDem = scene["需求温度_degC"];
+    if (demand === "供暖·热水") return (tDem || 60.0);
+    if (demand === "干燥") return (tDem || 100.0);
+    if (demand === "工艺蒸汽") return (tDem || 152.0);
+    if (demand === "储热调峰") return (tDem || 90.0);
+    return (tDem || 60.0);
+  }
+
+  /* 返回 { cop, tEvapC, tCondC }；无法提温或 COP≤1 时返回 null */
+  function compCopFor(scene) {
+    const tSrc = Number(scene["热源温度_degC"]);
+    if (!(tSrc > 0)) return null;
+    const tEvapC = tSrc - HP_APPROACH_K;
+    const tCondC = compSupplyTemp(scene) + HP_APPROACH_K;
+    if (!(tCondC > tEvapC + 2.0)) return null;
+    const th = tCondC + 273.15;
+    const tc = tEvapC + 273.15;
+    const copRaw = HP_ETA_CARNOT * th / (th - tc);
+    if (!(copRaw > 1.0)) return null;
+    const cop = Math.min(copRaw, HP_COP_MAX);
+    return { cop: cop, copRaw: copRaw, capped: cop < copRaw - 1e-9,
+             tEvapC: tEvapC, tCondC: tCondC };
   }
 
   /* 年产出价值（万元 / MW装机·年）。口径见 ECON_GRADE 上方说明。 */
@@ -272,9 +321,9 @@ window.WHENG = (function () {
   }
 
   /* 年能耗成本（万元 / MW装机·年）：只对"自己要耗电/耗汽"的路径非零 */
-  function energyCostWanMw(path, hours) {
+  function energyCostWanMw(path, hours, compCop) {
     if (path === "comp") {
-      return (1.0 / HP_COP) * hours * ELEC_PRICE * 1000.0 / 10000.0;
+      return (1.0 / (compCop || HP_COP)) * hours * ELEC_PRICE * 1000.0 / 10000.0;
     }
     if (path === "comp_cool") {
       return (1.0 / COP_E_COOL) * hours * ELEC_PRICE * 1000.0 / 10000.0;
@@ -289,10 +338,10 @@ window.WHENG = (function () {
      运维 = 投资 × 费率。这个式子和 ORC 那一行是同一套：2380 ÷ (520 − 0 − 95.2) = 5.60 年，
      与台账引文的 5.58 年吻合 —— 说明表里原本的 5.6 年就是这么算的，
      所以我们只是把它显式化并对其它有出处的路径统一应用。 */
-  function paybackYears(path, investWanMw, hours) {
+  function paybackYears(path, investWanMw, hours, compCop) {
     const rate = OPEX_RATE[path] !== undefined ? OPEX_RATE[path] : OPEX_RATE_DEFAULT;
     const net = annualValueWanMw(path, hours)
-      - energyCostWanMw(path, hours)
+      - energyCostWanMw(path, hours, compCop)
       - investWanMw * rate;
     if (!(net > 0)) return null;
     return investWanMw / net;
@@ -329,7 +378,13 @@ window.WHENG = (function () {
         t >= tSteam + 20 ? ("热源 " + t + "℃ ≥ 蒸汽 " + tSteam + "℃ + 端差 20℃，可直接产汽")
           : ("热源 " + t + "℃ 不足以直接产生 " + tSteam + "℃ 蒸汽（需 ≥" + (tSteam + 20) + "℃）"));
       setk("abs_self", t >= 90, t >= 90 ? ("热源 " + t + "℃ 可自驱动吸收式（≥90℃）") : "吸收式自驱动需 ≥90℃ 驱动热源");
-      setk("comp", true, "压缩式热泵以电驱动，不受热源温度下限限制");
+      const ciSteam = compCopFor(scene);
+      setk("comp", !!ciSteam,
+        ciSteam
+          ? ("压缩式热泵以电驱动，温升 " +
+             (ciSteam.tCondC - ciSteam.tEvapC).toFixed(0) +
+             " K、COP≈" + ciSteam.cop.toFixed(2) + "（随温度计算）")
+          : "热源已高于需求温度，无需提温 —— 请用直接换热（热泵在无温升时无意义）");
       setk("abs_ext", false, "v2 中外购蒸汽驱动吸收式仅用于供暖·热水需求（扩展点）");
       ["direct", "orc", "steam_pp", "teg", "tc_storage", "pcm_storage", "abs_cool", "comp_cool"]
         .forEach((p) => setk(p, false, "需求为工艺蒸汽：该路径不产出蒸汽"));
@@ -342,7 +397,12 @@ window.WHENG = (function () {
       setk("abs_ext", driver === "外购蒸汽" && t >= 25,
         (driver === "外购蒸汽" && t >= 25) ? "外购蒸汽驱动吸收式：低温余热 + 蒸汽驱动（≥25℃ 可用）"
           : (driver !== "外购蒸汽" ? "未提供外购蒸汽，外购蒸汽驱动吸收式不可用" : "热源温度过低"));
-      setk("comp", true, "压缩式热泵以电驱动，适用低温余热提温");
+      setk("comp", !!compCopFor(scene),
+        compCopFor(scene)
+          ? ("压缩式热泵提温：温升 " +
+             (compCopFor(scene).tCondC - compCopFor(scene).tEvapC).toFixed(0) +
+             " K、COP≈" + compCopFor(scene).cop.toFixed(2) + "（随温度计算）")
+          : "热源已满足需求温度，无需提温 —— 请用直接换热");
       ["whb_steam", "orc", "steam_pp", "teg", "abs_cool", "comp_cool"]
         .forEach((p) => setk(p, false, "需求为供暖·热水：该路径不直接产热"));
       /* 储热不参与"用热"需求的排序（2026-09-27 修正）。
@@ -380,7 +440,12 @@ window.WHENG = (function () {
         t >= tDry + 20 ? ("热源 " + t + "℃ ≥ 干燥用蒸汽下限 " + (tDry + 20).toFixed(0) + "℃（默认 100℃+20℃）")
           : ("热源 " + t + "℃ 不足以直接产干燥用蒸汽（需 ≥" + (tDry + 20).toFixed(0) + "℃）"));
       setk("abs_self", t >= 90, t >= 90 ? "热源 ≥90℃ 可驱动吸收式热泵供热风（一类 COP1.7）" : "吸收式热泵需 ≥90℃ 驱动热源");
-      setk("comp", true, "热泵烘干以电驱动，适用低温干燥（60~90℃）提温");
+      setk("comp", !!compCopFor(scene),
+        compCopFor(scene)
+          ? ("热泵烘干提温：温升 " +
+             (compCopFor(scene).tCondC - compCopFor(scene).tEvapC).toFixed(0) +
+             " K、COP≈" + compCopFor(scene).cop.toFixed(2) + "（随温度计算）")
+          : "热源已满足干燥温度，无需提温 —— 请用直接换热");
       setk("abs_ext", false, "外购蒸汽驱动仅用于供暖·热水需求（干燥请用余热自驱动/热泵）");
       ["orc", "steam_pp", "teg", "tc_storage", "pcm_storage", "abs_cool", "comp_cool"]
         .forEach((p) => setk(p, false, "需求为干燥：该路径不直接烘干"));
@@ -390,7 +455,10 @@ window.WHENG = (function () {
       setk("direct", t >= Math.max(60.0, (tDem || 60.0) + Number(scene["换热端差_degC"])), "供暖调峰候选");
       setk("abs_self", t >= 90, t >= 90 ? "提温调峰候选" : "驱动热源不足");
       setk("abs_ext", driver === "外购蒸汽" && t >= 25, "外购蒸汽驱动候选");
-      setk("comp", true, "提温调峰候选");
+      setk("comp", !!compCopFor(scene),
+        compCopFor(scene)
+          ? ("提温调峰候选：COP≈" + compCopFor(scene).cop.toFixed(2) + "（随温度计算）")
+          : "无需提温");
       setk("orc", 110 <= t && t <= 350, (110 <= t && t <= 350) ? "发电调峰候选" : "超出 ORC 区间（110~350℃）");
       setk("steam_pp", 280 <= t && t <= 650, (280 <= t && t <= 650) ? "发电调峰候选" : "超出朗肯标定（280~650℃）");
       setk("teg", t >= 40, t >= 40 ? "发电兜底候选" : "温差不足");
@@ -469,7 +537,7 @@ window.WHENG = (function () {
   }
 
   function compReduction(scene, cop) {
-    const c = cop || HP_COP;
+    const c = cop || (compCopFor(scene) || {}).cop || HP_COP;
     const q = recoveredHeatKw(scene);
     const heatGj = q * Number(scene["年运行小时"]) * 3.6 / 1000.0;
     const elecMwh = heatGj / 3.6 / c;
@@ -494,6 +562,9 @@ window.WHENG = (function () {
     const q = recoveredHeatKw(scene);
     const hours = Number(scene["年运行小时"]);
     const demand = scene["需求"];
+    /* 压缩式热泵的 COP 随温度算（见 compCopFor）；其余路径不受影响 */
+    const compInfo = compCopFor(scene);
+    const compCop = compInfo ? compInfo.cop : null;
     for (let i = 0; i < survivors.length; i++) {
       const p = survivors[i];
 
@@ -514,6 +585,9 @@ window.WHENG = (function () {
         X[i][0] = pyRound(cop * 100.0, 2);
       } else if (p === "comp_cool") {
         X[i][0] = pyRound(COP_E_COOL * 0.38 * 100.0, 2);
+      } else if (p === "comp" && compCop) {
+        /* 能效列沿用台账口径：一次能源效率 = COP × 电网效率 38% */
+        X[i][0] = pyRound(compCop * 0.38 * 100.0, 2);
       }
 
       // ---- 第 2 步：规模档按"该路径自己的装机产出"定，不再一律按可回收热 ----
@@ -521,7 +595,7 @@ window.WHENG = (function () {
       // 所以规模分档也必须用同一个量。以前用可回收热量分档，等于给发电类
       // 路径多打了一次折扣（ORC 约 0.83 倍、蒸汽朗肯约 0.70 倍）。
       // 2026-09-27 证据链体检 B2 项。
-      const cap = capacityKw(p, q, X[i][0]);
+      const cap = capacityKw(p, q, X[i][0], compCop);
       const sf = scaleMultiplier(p, scaleBand(cap));
       X[i][1] = BASE_INDICATORS[p][1] * sf;
       X[i][2] = BASE_INDICATORS[p][2] * sf;
@@ -529,7 +603,7 @@ window.WHENG = (function () {
       // 有出处的路径：回收期改成公式现算（见 paybackYears）。
       // 无出处的路径保留工程估算/示意值，但那个值只用于展示，不参与排序。
       if (ECON_GRADE[p] === "sourced") {
-        const pb = paybackYears(p, X[i][1], hours);
+        const pb = paybackYears(p, X[i][1], hours, compCop);
         if (pb !== null) X[i][2] = pyRound(pb, 2);
       }
 
@@ -546,8 +620,9 @@ window.WHENG = (function () {
         X[i][3] = 0.0;
         X[i][5] = pyRound(compCoolOpexWanMw(scene), 1);
       } else if (p === "comp") {
-        X[i][3] = pyRound(compReduction(scene), 1);
-        X[i][5] = pyRound(0.357 * hours * ELEC_PRICE * 1000 / 10000, 1);
+        X[i][3] = pyRound(compReduction(scene, compCop), 1);
+        /* 运行成本＝自耗电成本，用电耗率 1/COP 算（原来是写死的 0.357，对应 COP2.8） */
+        X[i][5] = pyRound((1.0 / (compCop || HP_COP)) * hours * ELEC_PRICE * 1000 / 10000, 1);
       } else if (["direct", "whb_steam", "tc_storage", "pcm_storage"].indexOf(p) >= 0) {
         X[i][3] = pyRound(heatRedGas(scene), 1);
       }
@@ -782,6 +857,7 @@ window.WHENG = (function () {
   return {
     PATH_KEYS, DISPLAY, INDICATORS, DIRECTIONS, CP, BASE_INDICATORS,
     ABS_COOL_T_MIN, COP_C_ABS, COP_E_COOL, GRID_EF, ELEC_PRICE, HP_COP,
+    HP_ETA_CARNOT, HP_APPROACH_K, compCopFor, compSupplyTemp,
     setTables, validateScene, recoveredHeatKw, scaleBand, scaleMultiplier,
     absCoolCop, stage1, buildMatrixV2, entropyWeights, combinedWeights,
     topsis, runDecision, boundaryNotices, orcEffPct, steamEffPct,
@@ -1337,9 +1413,15 @@ function renderTop(res) {
     s1v = num(q, 0); co2 = 0; money = 0; s2v = "—";
     sub = "TEG 温差发电兜底候选：未做发电细账（转换效率低，仅低品位备选）";
   } else if (top === "comp") {
-    const d = eng.heatDetail(f, medCore, t, hours, dT, eng.HP_COP);
+    /* COP 由常数改为随温度计算（2026-09-27）：这里取当前工况的实际 COP */
+    const ci = eng.compCopFor(currentScene());
+    const copNow = ci ? ci.cop : null;
+    const d = eng.heatDetail(f, medCore, t, hours, dT, copNow);
     s1v = num(d.q, 0); s2v = num(d.heatGj / 3.6, 0); s2u = "MWh 热/年"; co2 = d.co2; money = d.money;
-    sub = `热泵提温 COP ${eng.HP_COP} · 替代天然气并扣除自身耗电（一次能源效率 ≈106%）`;
+    sub = ci
+      ? `热泵提温 COP ${copNow.toFixed(2)}（按温度计算：蒸发 ${ci.tEvapC.toFixed(0)}℃ → 冷凝 ${ci.tCondC.toFixed(0)}℃、` +
+        `温升 ${(ci.tCondC - ci.tEvapC).toFixed(0)} K、卡诺占比 ${eng.HP_ETA_CARNOT}）· 替代天然气并扣除自身耗电`
+      : `当前工况热源已满足需求温度，无需提温（热泵 COP 在无温升时无意义）`;
   } else if (top === "abs_cool") {
     const cop = eng.absCoolCop(t) || eng.COP_C_ABS;
     const q = eng.recoveredHeatKw(currentScene());
@@ -1649,7 +1731,8 @@ function renderRtFrame(f) {
     $("rt-co2").textContent = "0";
     $("rt-sub").textContent = "TEG 温差发电兜底候选（未做发电细账）";
   } else {
-    const dd = eng.heatDetail(m, MEDIUM_MAP[medium], t, hours, dT, top === "comp" ? eng.HP_COP : null);
+    const dd = eng.heatDetail(m, MEDIUM_MAP[medium], t, hours, dT,
+      top === "comp" ? (eng.compCopFor(currentScene()) || {}).cop || null : null);
     $("rt-out").textContent = num(dd.heatGj / 3.6, 0); $("rt-out-u").textContent = "MWh 热/年";
     $("rt-co2").textContent = num(dd.co2, 1);
     $("rt-sub").textContent = top === "comp" ? "热泵提温 COP 2.8（扣耗电）" : "替代天然气口径";
