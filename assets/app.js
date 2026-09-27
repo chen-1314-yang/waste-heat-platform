@@ -345,6 +345,51 @@ window.WHENG = (function () {
      发电类暂不改：ORC 的取值需要"按路径分别算回收热"（ORC 与蒸汽朗肯的
      降温程不同），属于下一步的重构，已在边界页登记。 */
   const HEAT_MIN_COOLDOWN_K = 10.0;
+
+  /* ---- 发电类的源侧降温设计（2026-09-27 按实测锚点建立）----
+     为什么必须按路径分别算：ORC 与蒸汽朗肯的降温程完全不同——
+     蒸汽朗肯的余热锅炉可以把烟气一路降到 150℃ 左右（受酸露点限制），
+     而单压 ORC 只能把热源降到"蒸发温度 + 端差"。
+
+     ORC 设计温差 ORC_COOLDOWN_K = 50 K：由三条工业实测反推的设计降温程——
+       燕山石化 S-Zorb 汽油 135→70℃（65 K）、海南炼化热水 118→70℃（48 K）、
+       土耳其 AKCA 卤水 105→60℃（45 K）。取 50 K。
+       蒸发温度 = clamp(热源温度 − 50, 100, 350)；源侧降温下限 = 蒸发温度 + 端差。
+
+     蒸汽朗肯排烟下限 STEAM_EXHAUST_FLOOR_C = 150℃：余热锅炉排烟不可能无限低
+       （酸露点 + 经济性）。实测参照：宁国水泥厂 4000 t/d 线的 PH 炉 350→250℃、
+       AQC 炉 360→91℃（《水泥》类年报数据）；取 150℃ 作偏保守的典型值。
+
+     ⚠ 已知局限（如实登记）：我们的 ORC 效率表标定范围是**异丁烷、p_high 1.8~3.6 MPa**，
+     对应蒸发温度 ≥100℃；而真实那个项目用 R245fa 在更低压力/温度下工作（蒸发约 65℃）。
+     因此本模型对"低温宽温差"型 ORC 会**偏保守**（燕山石化锚点上约偏低 2.4 倍）。
+     要消除这个偏差需要扩展 ORC 设计空间（低压段重新扫描），已登记为下一步。 */
+  const ORC_COOLDOWN_K = 50.0;
+  const STEAM_EXHAUST_FLOOR_C = 150.0;
+
+  function orcEvapTemp(scene) {
+    return clamp(Number(scene["热源温度_degC"]) - ORC_COOLDOWN_K, 100.0, 350.0);
+  }
+  function orcRecoveredKw(scene) {
+    const m = Number(scene["流量_kg_s"]);
+    if (!m) { const q = Number(scene["规模_kW"]); return q || 0; }
+    const span = Math.max(Number(scene["热源温度_degC"]) - orcEvapTemp(scene) -
+      Number(scene["换热端差_degC"]), 5.0);
+    return m * CP[scene["载体"]] * span;
+  }
+  function steamRecoveredKw(scene) {
+    const m = Number(scene["流量_kg_s"]);
+    if (!m) { const q = Number(scene["规模_kW"]); return q || 0; }
+    const span = Math.max(Number(scene["热源温度_degC"]) - STEAM_EXHAUST_FLOOR_C -
+      Number(scene["换热端差_degC"]), 5.0);
+    return m * CP[scene["载体"]] * span;
+  }
+  /* 按路径取回收热：发电类各用自己的设计降温程，其余沿用场景的 q */
+  function qForPath(path, scene, qDefault) {
+    if (path === "orc") return orcRecoveredKw(scene);
+    if (path === "steam_pp") return steamRecoveredKw(scene);
+    return qDefault;
+  }
   function heatFloor(scene) {
     const tSrc = Number(scene["热源温度_degC"]);
     const dT = Number(scene["换热端差_degC"]);
@@ -634,7 +679,10 @@ window.WHENG = (function () {
   // ORC 中位热效率（%）：heater 出口上限 = t - dT 的累计中位数
   function orcEffPct(tSrc, dT) {
     if (!TABLES || !TABLES.orcPct) return null;
-    const c = clamp(tSrc - dT, 100, 360);
+    /* 查表温度 2026-09-27 改为**设计蒸发温度**（= 热源 − 设计降温程 50 K），
+       而不是原来的 热源 − 端差 —— 后者会同时高估回收热与效率。
+       这样查表温度与 qForPath 里的降温下限是同一套口径。 */
+    const c = clamp(Number(tSrc) - ORC_COOLDOWN_K, 100, 360);
     const row = pctLookupRow(TABLES.orcPct, c);
     if (!row) return null;
     return row[2] / 10.0; // p50 kW/MW ÷ 10 → %
@@ -692,7 +740,8 @@ window.WHENG = (function () {
   }
 
   function powerReduction(path, scene) {
-    const q = recoveredHeatKw(scene);
+    /* 发电类减排也要用它自己的回收热口径（与装机容量、回收期同一口径） */
+    const q = qForPath(path, scene, recoveredHeatKw(scene));
     const hours = Number(scene["年运行小时"]);
     let e = null;
     if (path === "orc") e = orcEffPct(Number(scene["热源温度_degC"]), Number(scene["换热端差_degC"]));
@@ -742,7 +791,9 @@ window.WHENG = (function () {
       // 所以规模分档也必须用同一个量。以前用可回收热量分档，等于给发电类
       // 路径多打了一次折扣（ORC 约 0.83 倍、蒸汽朗肯约 0.70 倍）。
       // 2026-09-27 证据链体检 B2 项。
-      const cap = capacityKw(p, q, X[i][0], compCop);
+      /* 发电类各用自己的设计降温程算回收热（2026-09-27）：容量、投资规模、
+         减排与回收期全部跟着走，避免"一个 q 套所有路径"的自相矛盾 */
+      const cap = capacityKw(p, qForPath(p, scene, q), X[i][0], compCop);
       const sf = scaleMultiplier(p, scaleBand(cap));
       X[i][1] = BASE_INDICATORS[p][1] * sf;
       X[i][2] = BASE_INDICATORS[p][2] * sf;
@@ -1017,6 +1068,8 @@ window.WHENG = (function () {
     absCoolCop, stage1, buildMatrixV2, entropyWeights, combinedWeights,
     topsis, runDecision, boundaryNotices, orcEffPct, steamEffPct,
     orcDetail, steamDetail, heatDetail, pctLookupRow
+    , orcRecoveredKw, steamRecoveredKw, qForPath, orcEvapTemp
+    , ORC_COOLDOWN_K, STEAM_EXHAUST_FLOOR_C, HEAT_MIN_COOLDOWN_K, heatFloor
   };
 })();
 
