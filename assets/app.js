@@ -129,6 +129,119 @@ window.WHPARASITIC = (function () {
   };
 })();
 
+/* 工质适用性矩阵（25 工质）—— 由 tools/fluid_matrix_build.py 生成，勿手改。
+   数据源：M1M2 的 3,740 工况扫描结果；口径与限制见 meta.caveat。
+*/
+window.WHFLUIDS_MATRIX = { "meta": { "source": "M1M2/results/applicability_by_source.csv 与 applicability_by_fluid.csv", "generatedBy": "M1M2/src/gen_multifluid_sweep.py（3,740 工况、25 工质）", "conservation": "能量守恒最大绝对偏差 9.095e-13 kW（见 M1M2/results/applicability_matrix.md）", "caliber": "饱和蒸发 + 5 K 过热；冷凝按水冷 30℃/空冷 40℃；膨胀机等熵效率 0.70~0.90；泵效率 0.80", "caveat": "热稳定性上限一律[待标定] → 只保证物理可行域，不是工程可行域；HFE7000/7100 不在 CoolProp 内置列表内，未覆盖；与本网站主效率表口径不同（背压 0.5~0.7 MPa），不可互换", "bySourceColumns": [ "热源温度℃", "可用工质数", "效率口径第一名", "效率口径热效率%", "效率口径净功kJ/kg", "比功口径第一名", "比功口径净功kJ/kg", "比功口径热效率%", "真空冷凝工质数" ], "byFluidColumns": [ "工质", "CoolProp名", "族别", "冷却方式", "临界温度℃", "临界压力bar", "工况数", "最低热源温度℃", "最高热源温度℃", "最佳热效率%", "最佳点热源温度℃", "最大净功kJ/kg", "真空冷凝", "热稳定约束" ] }, "bySource": [ [ 80.0, 24, "甲醇", 7.85, 94.9, "甲醇", 94.9, 7.85, 5 ], [ 100.0, 24, "甲醇", 12.08, 148.2, "甲醇", 148.2, 12.08, 5 ], [ 120.0, 24, "甲醇", 15.67, 194.7, "甲醇", 194.7, 15.67, 5 ], [ 140.0, 24, "甲醇", 18.71, 234.7, "甲醇", 234.7, 18.71, 5 ], [ 160.0, 24, "甲醇", 21.28, 268.3, "甲醇", 268.3, 21.28, 5 ], [ 180.0, 24, "甲醇", 23.42, 295.1, "甲醇", 295.1, 23.42, 5 ], [ 200.0, 25, "水/蒸汽", 25.73, 686.0, "水/蒸汽", 686.0, 25.73, 6 ], [ 250.0, 25, "水/蒸汽", 29.72, 800.4, "水/蒸汽", 800.4, 29.72, 6 ], [ 300.0, 25, "水/蒸汽", 32.5, 879.7, "水/蒸汽", 879.7, 32.5, 6 ], [ 350.0, 25, "水/蒸汽", 35.85, 983.6, "水/蒸汽", 996.6, 35.36, 6 ], [ 400.0, 25, "水/蒸汽", 36.42, 1054.4, "水/蒸汽", 1056.5, 35.86, 6 ], [ 450.0, 25, "水/蒸汽", 36.96, 1115.8, "水/蒸汽", 1115.8, 36.96, 6 ], [ 500.0, 25, "水/蒸汽", 37.49, 1173.8, "水/蒸汽", 1173.8, 37.49, 6 ], [ 550.0, 25, "水/蒸汽", 38.55, 1287.1, "水/蒸汽", 1287.1, 38.55, 6 ], [ 600.0, 25, "水/蒸汽", 38.55, 1287.1, "水/蒸汽", 1287.1, 38.55, 6 ] ], "byFluid": [ [ "环己烷", "CycloHexane", "碳氢", "水冷", 280.5, 40.8, 90.0, 75.0, 275.0, 25.55, 275.0, 190.7, "否", "[待标定]" ], [ "环戊烷", "Cyclopentane", "碳氢", "水冷", 238.6, 45.8, 80.0, 75.0, 235.0, 24.7, 235.0, 157.7, "否", "[待标定]" ], [ "环己烷", "CycloHexane", "碳氢", "空冷", 280.5, 40.8, 90.0, 75.0, 275.0, 24.17, 275.0, 175.8, "否", "[待标定]" ], [ "环戊烷", "Cyclopentane", "碳氢", "空冷", 238.6, 45.8, 80.0, 75.0, 235.0, 23.26, 235.0, 144.1, "否", "[待标定]" ], [ "正己烷", "n-Hexane", "碳氢", "水冷", 234.7, 30.4, 80.0, 75.0, 235.0, 21.74, 235.0, 150.4, "否", "[待标定]" ], [ "正己烷", "n-Hexane", "碳氢", "空冷", 234.7, 30.4, 80.0, 75.0, 235.0, 20.46, 235.0, 136.8, "否", "[待标定]" ], [ "正戊烷 R601", "n-Pentane", "碳氢", "水冷", 196.5, 33.7, 65.0, 75.0, 195.0, 20.06, 195.0, 119.0, "否", "[待标定]" ], [ "异戊烷 R601a", "Isopentane", "碳氢", "水冷", 187.2, 33.8, 65.0, 75.0, 195.0, 19.56, 195.0, 109.9, "否", "[待标定]" ], [ "正戊烷 R601", "n-Pentane", "碳氢", "空冷", 196.5, 33.7, 65.0, 75.0, 195.0, 18.69, 195.0, 106.4, "否", "[待标定]" ], [ "异戊烷 R601a", "Isopentane", "碳氢", "空冷", 187.2, 33.8, 65.0, 75.0, 195.0, 18.2, 195.0, 98.0, "否", "[待标定]" ], [ "正丁烷 R600", "n-Butane", "碳氢", "水冷", 152.0, 38.0, 45.0, 75.0, 155.0, 17.07, 155.0, 84.1, "否", "[待标定]" ], [ "正丁烷 R600", "n-Butane", "碳氢", "空冷", 152.0, 38.0, 45.0, 75.0, 155.0, 15.56, 155.0, 72.8, "否", "[待标定]" ], [ "异丁烷 R600a", "IsoButane", "碳氢", "水冷", 134.7, 36.3, 35.0, 75.0, 135.0, 14.97, 135.0, 64.4, "否", "[待标定]" ], [ "异丁烷 R600a", "IsoButane", "碳氢", "空冷", 134.7, 36.3, 35.0, 75.0, 135.0, 13.39, 135.0, 54.3, "否", "[待标定]" ], [ "R1233zd(E)", "R1233zd(E)", "HFO/低GWP", "水冷", 165.7, 35.8, 50.0, 75.0, 165.0, 18.41, 165.0, 47.1, "否", "[待标定]" ], [ "R1336mzz(Z)", "R1336mzz(Z)", "HFO/低GWP", "水冷", 171.3, 29.0, 55.0, 75.0, 175.0, 18.1, 175.0, 46.5, "否", "[待标定]" ], [ "R1224yd(Z)", "R1224YDZ", "HFO/低GWP", "水冷", 155.5, 33.3, 45.0, 75.0, 155.0, 17.03, 155.0, 38.5, "否", "[待标定]" ], [ "R1233zd(E)", "R1233zd(E)", "HFO/低GWP", "空冷", 165.7, 35.8, 50.0, 75.0, 165.0, 16.93, 165.0, 41.2, "否", "[待标定]" ], [ "R1336mzz(Z)", "R1336mzz(Z)", "HFO/低GWP", "空冷", 171.3, 29.0, 55.0, 75.0, 175.0, 16.73, 175.0, 40.9, "否", "[待标定]" ], [ "R1224yd(Z)", "R1224YDZ", "HFO/低GWP", "空冷", 155.5, 33.3, 45.0, 75.0, 155.0, 15.55, 155.0, 33.3, "否", "[待标定]" ], [ "R1234ze(E)", "R1234ze(E)", "HFO/低GWP", "水冷", 109.4, 36.3, 25.0, 75.0, 115.0, 12.51, 115.0, 24.4, "否", "[待标定]" ], [ "R1234ze(E)", "R1234ze(E)", "HFO/低GWP", "空冷", 109.4, 36.3, 25.0, 75.0, 115.0, 10.84, 115.0, 19.6, "否", "[待标定]" ], [ "R365mfc", "R365MFC", "HFC", "水冷", 186.9, 32.7, 60.0, 75.0, 185.0, 18.87, 185.0, 59.8, "否", "[待标定]" ], [ "R365mfc", "R365MFC", "HFC", "空冷", 186.9, 32.7, 60.0, 75.0, 185.0, 17.53, 185.0, 53.1, "否", "[待标定]" ], [ "R245fa", "R245fa", "HFC", "水冷", 153.9, 36.5, 45.0, 75.0, 155.0, 17.07, 155.0, 44.0, "否", "[待标定]" ], [ "R245fa", "R245fa", "HFC", "空冷", 153.9, 36.5, 45.0, 75.0, 155.0, 15.58, 155.0, 38.1, "否", "[待标定]" ], [ "R236fa", "R236FA", "HFC", "水冷", 124.9, 31.9, 30.0, 75.0, 125.0, 13.58, 125.0, 25.6, "否", "[待标定]" ], [ "R236fa", "R236FA", "HFC", "空冷", 124.9, 31.9, 30.0, 75.0, 125.0, 12.02, 125.0, 21.2, "否", "[待标定]" ], [ "R134a", "R134a", "HFC", "水冷", 101.1, 40.6, 20.0, 75.0, 105.0, 11.38, 105.0, 22.0, "否", "[待标定]" ], [ "R227ea", "R227EA", "HFC", "水冷", 101.8, 29.3, 20.0, 75.0, 105.0, 10.71, 105.0, 15.2, "否", "[待标定]" ], [ "R134a", "R134a", "HFC", "空冷", 101.1, 40.6, 20.0, 75.0, 105.0, 9.62, 105.0, 17.2, "否", "[待标定]" ], [ "R227ea", "R227EA", "HFC", "空冷", 101.8, 29.3, 20.0, 75.0, 105.0, 9.08, 105.0, 11.8, "否", "[待标定]" ], [ "六甲基二硅氧烷 MM", "MM", "硅氧烷", "水冷", 245.6, 19.3, 80.0, 75.0, 235.0, 18.55, 235.0, 98.5, "是", "[待标定]" ], [ "八甲基三硅氧烷 MDM", "MDM", "硅氧烷", "水冷", 292.2, 14.4, 95.0, 75.0, 295.0, 18.35, 295.0, 111.6, "是", "[待标定]" ], [ "十甲基四硅氧烷 MD2M", "MD2M", "硅氧烷", "水冷", 326.2, 11.4, 100.0, 75.0, 315.0, 17.76, 315.0, 113.4, "是", "[待标定]" ], [ "六甲基二硅氧烷 MM", "MM", "硅氧烷", "空冷", 245.6, 19.3, 80.0, 75.0, 235.0, 17.47, 235.0, 89.4, "否", "[待标定]" ], [ "八甲基三硅氧烷 MDM", "MDM", "硅氧烷", "空冷", 292.2, 14.4, 95.0, 75.0, 295.0, 17.37, 295.0, 102.5, "是", "[待标定]" ], [ "十甲基四硅氧烷 MD2M", "MD2M", "硅氧烷", "空冷", 326.2, 11.4, 100.0, 75.0, 315.0, 16.83, 315.0, 104.5, "是", "[待标定]" ], [ "邻二甲苯", "o-Xylene", "芳香", "水冷", 357.1, 37.4, 110.0, 75.0, 355.0, 29.27, 355.0, 258.0, "是", "[待标定]" ], [ "甲苯", "Toluene", "芳香", "水冷", 318.6, 41.3, 100.0, 75.0, 315.0, 28.93, 315.0, 221.8, "是", "[待标定]" ], [ "苯", "Benzene", "芳香", "水冷", 288.9, 49.1, 95.0, 75.0, 295.0, 28.63, 295.0, 202.7, "否", "[待标定]" ], [ "邻二甲苯", "o-Xylene", "芳香", "空冷", 357.1, 37.4, 110.0, 75.0, 355.0, 27.95, 355.0, 241.3, "是", "[待标定]" ], [ "甲苯", "Toluene", "芳香", "空冷", 318.6, 41.3, 100.0, 75.0, 315.0, 27.57, 315.0, 206.5, "是", "[待标定]" ], [ "苯", "Benzene", "芳香", "空冷", 288.9, 49.1, 95.0, 75.0, 295.0, 27.27, 295.0, 188.3, "否", "[待标定]" ], [ "甲醇", "Methanol", "醇", "水冷", 240.2, 82.2, 80.0, 75.0, 235.0, 27.56, 235.0, 334.6, "否", "[待标定]" ], [ "乙醇", "Ethanol", "醇", "水冷", 241.6, 62.7, 80.0, 75.0, 235.0, 26.89, 235.0, 294.3, "否", "[待标定]" ], [ "甲醇", "Methanol", "醇", "空冷", 240.2, 82.2, 80.0, 75.0, 235.0, 26.08, 235.0, 309.9, "否", "[待标定]" ], [ "乙醇", "Ethanol", "醇", "空冷", 241.6, 62.7, 80.0, 75.0, 235.0, 25.42, 235.0, 271.8, "否", "[待标定]" ], [ "水/蒸汽", "Water", "水", "水冷", 373.9, 220.6, 320.0, 190.0, 550.0, 38.55, 550.0, 1287.1, "是", "[待标定]" ], [ "水/蒸汽", "Water", "水", "空冷", 373.9, 220.6, 320.0, 190.0, 550.0, 37.34, 550.0, 1231.1, "是", "[待标定]" ] ] };
+
+/* 工质适用性层（25 工质矩阵）—— 2026-09-28 新增（P2-10）
+
+   ## 它回答什么问题
+
+   主计算链路里的 ORC 效率表只覆盖两种工质（异丁烷、R245fa，背压 0.5~0.7 MPa）。
+   一旦热源温度跑到别的区间、或者有人问"为什么不用甲醇/甲苯/硅氧烷"，
+   原来的模型没有答案。这一层把项目里已经做完的 **25 工质 × 3,740 工况矩阵**
+   （M1M2 成果，能量守恒偏差 9.1e-13 kW）接进来，回答：
+     · 当前热源温度下有多少种工质物理可行；
+     · 效率口径与比功口径的领先者分别是谁、到什么水平；
+     · 有多少工质会落进"真空冷凝"（需要真空级密封，工程上要额外代价）。
+
+   ## 为什么不直接用它替换主效率表（重要）
+
+   两者口径不同，不能互换：
+     · 主表：异丁烷/R245fa、背压 0.5~0.7 MPa（冷凝约 50~62℃）、已与 DWSIM 交叉核对；
+     · 矩阵：饱和蒸发 + 5 K 过热、冷凝按水冷 30℃/空冷 40℃、25 工质，
+       但**热稳定性上限一律 [待标定]** —— 只保证物理可行域，不是工程可行域。
+   所以本层只做"可选域与上界"的说明，主计算仍用已标定的表。
+   界面必须同时显示这两个数字与差异原因，避免读者以为可以把矩阵值直接当预测值。
+*/
+window.WHFLUIDS = (function () {
+  "use strict";
+
+  const M = window.WHFLUIDS_MATRIX || { bySource: [], byFluid: [], meta: {} };
+  const META = M.meta || {};
+
+  function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+
+  /* 折线插值（按温度取领先者时不做插值，只取最近档；数值项做线性插值） */
+  function nearestRow(t) {
+    const rows = M.bySource || [];
+    if (!rows.length) return null;
+    let best = rows[0], bestD = Infinity;
+    for (let i = 0; i < rows.length; i++) {
+      const d = Math.abs(rows[i][0] - t);
+      if (d < bestD) { bestD = d; best = rows[i]; }
+    }
+    return best;
+  }
+
+  function lerpNum(t, idx) {
+    const rows = M.bySource || [];
+    if (!rows.length) return null;
+    if (t <= rows[0][0]) return rows[0][idx];
+    const last = rows[rows.length - 1];
+    if (t >= last[0]) return last[idx];
+    for (let i = 0; i < rows.length - 1; i++) {
+      if (t >= rows[i][0] && t <= rows[i + 1][0]) {
+        const f = (t - rows[i][0]) / ((rows[i + 1][0] - rows[i][0]) || 1);
+        return rows[i][idx] + (rows[i + 1][idx] - rows[i][idx]) * f;
+      }
+    }
+    return last[idx];
+  }
+
+  /* 指定热源温度下的适用性摘要 */
+  function applicability(tSrc) {
+    const row = nearestRow(Number(tSrc));
+    if (!row) return null;
+    return {
+      tGrid: row[0],
+      fluidCount: row[1],
+      effLeader: row[2], effPct: row[3], effWork: row[4],
+      workLeader: row[5], workKjKg: row[6], workEffPct: row[7],
+      vacuumCount: row[8],
+      effPctInterp: lerpNum(Number(tSrc), 3),
+      fluidCountInterp: lerpNum(Number(tSrc), 1)
+    };
+  }
+
+  /* 指定热源温度下"物理可行"的工质清单（按最佳热效率降序，取水冷口径） */
+  function fluidsAt(tSrc, cooling) {
+    const t = Number(tSrc);
+    const mode = cooling || "水冷";
+    const rows = (M.byFluid || []).filter(function (r) {
+      return r[3] === mode && t >= r[7] && t <= r[8];
+    });
+    rows.sort(function (a, b) { return (b[9] || 0) - (a[9] || 0); });
+    return rows.map(function (r) {
+      return { name: r[0], fluid: r[1], family: r[2], tCritC: r[4],
+               bestEffPct: r[9], bestAtC: r[10], maxWork: r[11],
+               vacuum: r[12] === "是", thermalLimit: r[13] };
+    });
+  }
+
+  /* 与主效率表的口径对照（用于界面上一句话说明差距来自哪里） */
+  function comparison(tSrc, calibratedEffPct) {
+    const a = applicability(tSrc);
+    if (!a) return null;
+    const gap = (calibratedEffPct && a.effPctInterp)
+      ? (a.effPctInterp / calibratedEffPct) : null;
+    return {
+      matrixLeader: a.effLeader, matrixEffPct: a.effPctInterp,
+      calibratedEffPct: calibratedEffPct, ratio: gap,
+      reason: "矩阵口径：冷凝 30~40℃、饱和蒸发+5K 过热、25 种工质任选、热稳定上限未标定；" +
+        "主表口径：异丁烷/R245fa、背压 0.5~0.7 MPa（冷凝约 50~62℃）、已与 DWSIM 对拍。"
+    };
+  }
+
+  function hasMatrix() { return !!(M.bySource && M.bySource.length); }
+
+  return {
+    META: META, hasMatrix: hasMatrix, applicability: applicability,
+    fluidsAt: fluidsAt, comparison: comparison
+  };
+})();
+
 /* decision engine v2.1 -> JS 移植（路径筛选、指标公式、红线照 11_决策内核v2_全温域/decision_core.py）
    ⚠ 与 Python 内核的**一处已知差异**（2026-09-27 证据链体检查出，尚未对齐）：
      排序权重本文件用「AHP 主观权重 + 熵权」按 λ 混合（默认 λ=0.5，界面可调），
@@ -332,6 +445,10 @@ window.WHENG = (function () {
                      江苏 0.92、四川 0.81、河南 0.75、北京 0.54、福建 0.52），
                     去掉重复项后中位约 0.94，取山东值 0.95 作默认。 */
                  peakValley: 0.95,
+                 /* ORC 设计降温程（源侧被冷却 K），2026-09-28 做成可调参数（P2-9）。
+                    默认 46.5 K＝两条可用工业实测锚点的中位（海南炼化 48、AKCA 45；
+                    燕山石化那条 65 K 因数据自身不成立已被剔除，见 ORC_COOLDOWN_K 注释）。 */
+                 orcCooldown: 46.5,
                  /* 储热收益口径："heat"＝售热（替代燃料，原口径）、
                     "arbitrage"＝峰谷套利（替代峰段电加热）、"stack"＝两者叠加（见注意事项）、
                     "off"＝不计收益（只做技术展示）。 */
@@ -359,6 +476,7 @@ window.WHENG = (function () {
     if (p.storageCharge && ["valley", "waste"].indexOf(p.storageCharge) >= 0) {
       PRICES.storageCharge = p.storageCharge;
     }
+    if (p.orcCooldown > 0) PRICES.orcCooldown = Number(p.orcCooldown);
   }
   function elecPrice() { return PRICES.elec; }
   function heatingHoursCap() { return PRICES.heatingHours; }
@@ -367,6 +485,7 @@ window.WHENG = (function () {
   function peakValley() { return PRICES.peakValley; }
   function storageRevenueMode() { return PRICES.storageMode; }
   function storageChargeMode() { return PRICES.storageCharge; }
+  function orcCooldownK() { return PRICES.orcCooldown; }
   /* 储热的年等效满功率放电小时（不超过用户填的年运行小时） */
   function storageHoursOf(hours) {
     const h = Number(hours);
@@ -514,10 +633,20 @@ window.WHENG = (function () {
      蒸汽朗肯的余热锅炉可以把烟气一路降到 150℃ 左右（受酸露点限制），
      而单压 ORC 只能把热源降到"蒸发温度 + 端差"。
 
-     ORC 设计温差 ORC_COOLDOWN_K = 50 K：由三条工业实测反推的设计降温程——
-       燕山石化 S-Zorb 汽油 135→70℃（65 K）、海南炼化热水 118→70℃（48 K）、
-       土耳其 AKCA 卤水 105→60℃（45 K）。取 50 K。
-       蒸发温度 = clamp(热源温度 − 50, 100, 350)；源侧降温下限 = 蒸发温度 + 端差。
+     ORC 设计温差 ORC_COOLDOWN_K（源侧被冷却多少 K）：
+     ★ 2026-09-28 复核（P2-9 / P3-11），原来写"三条实测取 50 K"，现改为两条可用锚点的中位 46.5 K：
+       · 海南炼化（开山 2×串级 R245fa）：热水 118→70℃ = **48 K**（可用）；
+       · 土耳其 AKCA（Exergy）：卤水 105→60℃ = **45 K**（可用）；
+       · 燕山石化 S-Zorb（开山 900 kW）：汽油 135→70℃ = 65 K ——
+         **该条数据自身不成立，已从锚点里剔除**：900 kW 净输出 ÷ 5 642 kW 回收热 = 16%，
+         而 135→70℃ 的卡诺效率上限只有 11%（16% > 11%，物理上不可能；多半是
+         "额定额定值/年均值"或"回收热口径"被混用）。算式见
+         docs/2026-09-28-P1批次_精度与口径修正.md 第七节。
+       蒸发温度 = clamp(热源温度 − ORC_COOLDOWN_K, 60, 350)；源侧降温下限 = 蒸发温度 + 端差。
+     ★ 该值现在是**界面参数**（2026-09-28，P2-9）：设计降温程本质上是"回收热量 vs 蒸发温度"
+       的取舍（降温越大 → 回收热越多，但蒸发温度越高、换热器面积与压降也越大），
+       真实项目落在 45~65 K。界面可调 30~90 K，并另外给出**功率最优设计点**作对照
+       （提示：那个最优点没有计入换热器面积成本，不能直接当作推荐设计）。
 
      蒸汽朗肯排烟下限 STEAM_EXHAUST_FLOOR_C = 150℃：余热锅炉排烟不可能无限低
        （酸露点 + 经济性）。实测参照：宁国水泥厂 4000 t/d 线的 PH 炉 350→250℃、
@@ -527,11 +656,20 @@ window.WHENG = (function () {
      对应蒸发温度 ≥100℃；而真实那个项目用 R245fa 在更低压力/温度下工作（蒸发约 65℃）。
      因此本模型对"低温宽温差"型 ORC 会**偏保守**（燕山石化锚点上约偏低 2.4 倍）。
      要消除这个偏差需要扩展 ORC 设计空间（低压段重新扫描），已登记为下一步。 */
-  const ORC_COOLDOWN_K = 50.0;
+  const ORC_COOLDOWN_K = 46.5;   // 默认值；运行时用 orcCooldownK() 读取（界面可调）
   const STEAM_EXHAUST_FLOOR_C = 150.0;
 
   function orcEvapTemp(scene) {
-    return clamp(Number(scene["热源温度_degC"]) - ORC_COOLDOWN_K, 60.0, 350.0);
+    return orcDesignEvapTemp(Number(scene["热源温度_degC"]),
+                             Number(scene["换热端差_degC"]));
+  }
+  /* 设计蒸发温度 = 热源温度 − 源侧降温程 − 换热端差。
+     ★ 2026-09-28 修正口径：orcCooldown 的定义是**源侧被冷却多少 K**
+     （实测锚点就是这么量的：海南炼化 118→70℃＝48 K），
+     所以蒸发温度必须再减掉换热端差 —— 原来把"热源−蒸发温度"当成了降温程，
+     等于让源侧实际只降 (降温程 − 端差)，比锚点少降 10~25 K。 */
+  function orcDesignEvapTemp(tSrcC, dTC) {
+    return clamp(Number(tSrcC) - orcCooldownK() - Number(dTC), 60.0, 350.0);
   }
   function orcRecoveredKw(scene) {
     const m = Number(scene["流量_kg_s"]);
@@ -600,6 +738,10 @@ window.WHENG = (function () {
      温升下是 4~5。以前用一条"工程判断"的常数 5.5 封顶；现在改成实测包络。
 
      实测点（温升按本模型口径换算：冷凝温度 − 蒸发温度 = 需求−热源+2×端差）：
+       · 西安交通大学 7 MW 级燃气锅炉烟气热泵**现场实测 COP 6.75**（同项目仿真 6.65，
+         偏差 −1.5%）——公开资料只给 COP，热源/供水温度未给，按"烟气 55℃ → 供水 60℃"
+         估算对应模型口径温升约 15 K。这一条把包络的低温升端从 5.3 抬到 **6.75**：
+         小温升 + 大机组确实能做到 6~7，而原来的 5.3 会把它误封顶。
        · KOBELCO HEMⅢ-HR95WZ **大型机组**：热水温升 30~35 K 处 COP **5.3**
          → 模型口径温升 40~45 K
        · R515B 变频涡旋**实验样机**：热源 50℃、出水 70→85℃，COP 4.48→3.25
@@ -609,8 +751,7 @@ window.WHENG = (function () {
 
      包络取"同一温升区段里不同机型的**上界**"，且必须随温升单调不增
      （COP 不可能在温升变大时反而变高）：
-       温升 ≤45 K → 5.3（该区段上界）
-       → 3.92（70 K）→ 2.4（90 K 及以上保持）
+       15 K → 6.75（西交大 7 MW 实测）→ 5.3（45 K，KOBELCO）→ 3.92（70 K）→ 2.4（≥90 K）
      R515B 样机在 45 K 处只有 3.25，而大型机组同区段有 5.3 —— 取 5.3 意味着
      本包络**不保证小机组能达到**。小机组的 COP 折减还没有数据，
      已登记为待标定项（拿到小机组实测即补）。
@@ -619,6 +760,7 @@ window.WHENG = (function () {
      η = 0.39（R515B 小温升）/ 0.40（R515B 大温升）/ 0.68（珠海样本）/ 0.52（DEA 算例），
      中位约 0.5）——所以 η 不再改，改的是小温升处的**上限**。 */
   const HP_COP_ENVELOPE = [
+    [15.0, 6.75],   // 西安交大 7 MW 燃气锅炉烟气热泵现场实测（温升按假设条件估算）
     [45.0, 5.30],   // KOBELCO 大型机组（该区段上界；R515B 样机同点只有 3.25）
     [70.0, 3.92],   // 珠海产品样本
     [90.0, 2.40]    // 丹麦能源署工艺加热算例
@@ -959,14 +1101,18 @@ window.WHENG = (function () {
 
   // ORC 中位热效率（%）：heater 出口上限 = t - dT 的累计中位数
   function orcEffPct(tSrc, dT) {
-    if (!TABLES || !TABLES.orcPct) return null;
     /* 查表温度 2026-09-27 改为**设计蒸发温度**（= 热源 − 设计降温程 50 K），
        而不是原来的 热源 − 端差 —— 后者会同时高估回收热与效率。
        这样查表温度与 qForPath 里的降温下限是同一套口径。 */
     /* 下限 2026-09-27 由 100℃ 下调到 60℃：效率表已扩到「异丁烷低压段 + R245fa」
        （tools/scan_orc_lowtemp.py，合并 7,550 点），可表示 60℃ 蒸发这种低温宽温差设计 */
-    const c = clamp(Number(tSrc) - ORC_COOLDOWN_K, 60, 360);
-    const row = pctLookupRow(TABLES.orcPct, c);
+    return orcEffByEvapTemp(orcDesignEvapTemp(tSrc, dT));
+  }
+
+  /* 按"设计蒸发温度"直接查效率表（%）。P2-9：设计点扫描与主流程共用这一个入口。 */
+  function orcEffByEvapTemp(tEvapC) {
+    if (!TABLES || !TABLES.orcPct) return null;
+    const row = pctLookupRow(TABLES.orcPct, clamp(Number(tEvapC), 60, 360));
     if (!row) return null;
     return row[2] / 10.0; // p50 kW/MW ÷ 10 → %
   }
@@ -994,12 +1140,11 @@ window.WHENG = (function () {
        ② 管路/换热器/阀门压降要额外加压升。
      公式、实测锚点与诚实性边界见 src/engine/parasitic.js 头部说明；
      量级：10 kW 级 ORC 扣 0.6~1.1 个百分点、5 MW 级扣 0.1~0.2 个百分点。 */
-  function netEffPct(path, tSrc, qKw) {
+  function netEffPct(path, tSrc, qKw, dT) {
     const P = window.WHPARASITIC;
     let e0 = null, tDesign = null, kind = null;
     if (path === "orc") {
-      e0 = orcEffPct(tSrc, 0); kind = "orc";
-      tDesign = clamp(Number(tSrc) - ORC_COOLDOWN_K, 60, 360);
+      return orcNetEffByEvap(orcDesignEvapTemp(tSrc, dT || 0), qKw);
     } else if (path === "steam_pp") {
       e0 = steamEffPct(tSrc); kind = "steam";
       tDesign = clamp(Number(tSrc) - 100.0, 180.0, 540.0);
@@ -1010,10 +1155,21 @@ window.WHENG = (function () {
     const loss = P.lossPct(kind, tDesign, cap0);
     return e0 - loss;
   }
+
+  /* 指定设计蒸发温度下的 ORC 交付净效率（%，已扣泵功与管路压降）——
+     设计点扫描（P2-9）用这个入口。 */
+  function orcNetEffByEvap(tEvapC, qKw) {
+    const e0 = orcEffByEvapTemp(tEvapC);
+    if (e0 === null || e0 === undefined) return null;
+    const P = window.WHPARASITIC;
+    if (!P || !P.hasTable("orc")) return e0;
+    const cap0 = Math.max(Number(qKw) * e0 / 100.0, 1e-6);
+    return e0 - P.lossPct("orc", clamp(Number(tEvapC), 60, 360), cap0);
+  }
   /* 修正量本身（百分点），供界面/文档展示 */
-  function parasiticPct(path, tSrc, qKw) {
-    const raw = path === "orc" ? orcEffPct(tSrc, 0) : steamEffPct(tSrc);
-    const net = netEffPct(path, tSrc, qKw);
+  function parasiticPct(path, tSrc, qKw, dT) {
+    const raw = path === "orc" ? orcEffPct(tSrc, dT || 0) : steamEffPct(tSrc);
+    const net = netEffPct(path, tSrc, qKw, dT);
     if (raw === null || net === null) return null;
     return raw - net;
   }
@@ -1081,7 +1237,7 @@ window.WHENG = (function () {
     const hours = Number(scene["年运行小时"]);
     let e = null;
     if (path === "orc" || path === "steam_pp") {
-      e = netEffPct(path, Number(scene["热源温度_degC"]), q);
+      e = netEffPct(path, Number(scene["热源温度_degC"]), q, Number(scene["换热端差_degC"]));
     }
     else if (path === "teg") e = BASE_INDICATORS.teg[0];  // TEG 能效列（5%）
     else return 0.0;
@@ -1105,10 +1261,10 @@ window.WHENG = (function () {
       if (p === "orc") {
         /* 2026-09-28：能效列改用**交付净效率**（已扣泵功与管路压降的系统寄生损失），
            这样装机容量、发年电量、减排量与回收期全部是"到用户手上的净输出"口径 */
-        const e = netEffPct("orc", Number(scene["热源温度_degC"]), orcRecoveredKw(scene));
+        const e = netEffPct("orc", Number(scene["热源温度_degC"]), orcRecoveredKw(scene), Number(scene["换热端差_degC"]));
         if (e !== null && e !== undefined) X[i][0] = pyRound(e, 2);
       } else if (p === "steam_pp") {
-        const e = netEffPct("steam_pp", Number(scene["热源温度_degC"]), steamRecoveredKw(scene));
+        const e = netEffPct("steam_pp", Number(scene["热源温度_degC"]), steamRecoveredKw(scene), Number(scene["换热端差_degC"]));
         if (e !== null && e !== undefined) X[i][0] = pyRound(e, 2);
       } else if (p === "abs_self") {
         /* 二类（升温型）用连续曲线：COP 随驱动温度与温升变化（2026-09-28 P1-3） */
@@ -1368,16 +1524,62 @@ window.WHENG = (function () {
   }
 
   // 展示用细账（ORC/蒸汽朗肯 P10/P50/P90 与净功率/收益）
+  /* ---- ORC 设计点扫描与"功率最优设计点"（2026-09-28，P2-9）----
+     为什么需要：设计降温程（源侧被冷却多少 K）决定了两件相反的事——
+     降温越大，可回收的热越多（分子大），但蒸发温度被压低、循环效率下降（比例小）。
+     真实项目取 45~65 K（可用实测锚点 45、48 K），说明工程上并没有"越大越好"。
+
+     本函数在给定热源条件下，逐 1 K 扫过可行的蒸发温度，算净电功率 =
+     净效率(蒸发温度) × 可回收热(蒸发温度)，给出净功率最大的设计点供对照。
+
+     ⚠ 它只优化功率，**没有计入换热器面积/压降/场地成本**（降温越大，换热器越贵），
+     所以它给出的都是"可行域边界附近"的设计，不能直接当推荐设计用 —— 界面照此说明。 */
+  function orcDesignScan(tSrc, mDot, medium, dT) {
+    const tS = Number(tSrc), dt = Number(dT);
+    const tEvapMax = Math.min(tS - dt - 5.0, 350.0);
+    const rows = [];
+    if (!(tEvapMax > 60.0) || !(Number(mDot) > 0) || !CP[medium]) return rows;
+    for (let te = 60.0; te <= tEvapMax + 1e-9; te += 1.0) {
+      const q = Number(mDot) * CP[medium] * Math.max(tS - te - dt, 5.0);
+      if (!(q > 0)) continue;
+      const eff = orcNetEffByEvap(te, q);
+      if (eff === null || eff === undefined) continue;
+      rows.push({ tEvapC: te, cooldownK: tS - te, qKw: q, effPct: eff,
+                  sourceDropK: tS - te - dt, netKw: q * eff / 100.0 });
+    }
+    return rows;
+  }
+
+  /* 返回 { current, best, gainPct }：当前设计（按界面降温程）与功率最优设计点 */
+  function orcOptimalDesign(tSrc, mDot, medium, dT) {
+    const rows = orcDesignScan(tSrc, mDot, medium, dT);
+    if (!rows.length) return null;
+    let best = rows[0];
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i].netKw > best.netKw) best = rows[i];
+    }
+    const tS = Number(tSrc), dt = Number(dT);
+    const teCur = orcDesignEvapTemp(tS, dt);
+    const qCur = Number(mDot) * CP[medium] * Math.max(tS - teCur - dt, 5.0);
+    const effCur = orcNetEffByEvap(teCur, qCur);
+    const current = { tEvapC: teCur, cooldownK: tS - teCur,
+                      sourceDropK: Math.max(tS - teCur - dt, 5.0), qKw: qCur,
+                      effPct: effCur, netKw: (effCur === null ? null : qCur * effCur / 100.0) };
+    const gainPct = (current.netKw && best.netKw)
+      ? (best.netKw / current.netKw - 1.0) * 100.0 : null;
+    return { current: current, best: best, gainPct: gainPct, n: rows.length };
+  }
+
   function orcDetail(tSrc, mDot, medium, hours, dT) {
     /* 查表温度 2026-09-28 与 orcEffPct 统一为**设计蒸发温度**（热源−50 K）。
        以前这里用 热源−端差，和矩阵里的 orcEffPct 不是同一个温度，属遗留不一致。 */
-    const c = clamp(tSrc - ORC_COOLDOWN_K, 60, 360);
+    const c = orcDesignEvapTemp(tSrc, dT);
     const row = pctLookupRow(TABLES.orcPct, c);
     if (!row) return null;
     // 回收热按该路径自己的降温程算（与矩阵 qForPath 同口径）
     const q = orcRecoveredKw({ "热源温度_degC": tSrc, "载体": medium, "流量_kg_s": mDot, "换热端差_degC": dT });
     const p50Table = row[2];
-    const p50 = p50Table - (parasiticPct("orc", tSrc, q * p50Table / 1000.0) || 0.0);
+    const p50 = p50Table - (parasiticPct("orc", tSrc, q * p50Table / 1000.0, dT) || 0.0);
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
     return { q, p10: row[1], p50, p90: row[3], n: row[4], net, mwh,
@@ -1424,6 +1626,8 @@ window.WHENG = (function () {
     absCoolCop, stage1, buildMatrixV2, entropyWeights, combinedWeights,
     topsis, runDecision, boundaryNotices, orcEffPct, steamEffPct,
     netEffPct, parasiticPct,
+    orcEffByEvapTemp, orcNetEffByEvap, orcDesignScan, orcOptimalDesign, orcCooldownK,
+    orcDesignEvapTemp,
     orcDetail, steamDetail, heatDetail, pctLookupRow
     , orcRecoveredKw, steamRecoveredKw, qForPath, orcEvapTemp
     , ORC_COOLDOWN_K, STEAM_EXHAUST_FLOOR_C, HEAT_MIN_COOLDOWN_K, heatFloor
@@ -1846,7 +2050,7 @@ let state = {
   price: 0.68, heatHours: 3200, gas: 98,
   /* 2026-09-28 新增：峰谷价差（储热套利口径）、储热收益口径、峰段等效放电小时 */
   pv: 0.95, storageMode: "heat", storageCharge: "waste",
-  storageHours: 1500, region: "custom"
+  storageHours: 1500, region: "custom", orcCooldown: 46.5
 };
 
 /* 地区预置（P1-5）：值全部来自外部检索到的官方公开价——
@@ -1880,12 +2084,14 @@ function readInputs() {
   if ($("storage-mode")) state.storageMode = $("storage-mode").value;
   if ($("storage-charge")) state.storageCharge = $("storage-charge").value;
   if ($("in-sh")) state.storageHours = +$("in-sh").value;
+  if ($("in-orc-cd")) state.orcCooldown = +$("in-orc-cd").value;
   if ($("region")) state.region = $("region").value;
   /* 把口径参数交给引擎（引擎内部所有电价、热价、供暖小时与储热口径都读它） */
   eng.setPrices({ elec: state.price, heatingHours: state.heatHours, heatPrice: state.gas,
                   peakValley: state.pv, storageMode: state.storageMode,
                   storageCharge: state.storageCharge,
-                  storageHours: state.storageHours });
+                  storageHours: state.storageHours,
+                  orcCooldown: state.orcCooldown });
   $("v-t").textContent = state.t + " ℃"; $("v-f").textContent = state.f + " kg/s";
   $("v-dt").textContent = state.dT + " ℃"; $("v-h").textContent = state.hours + " h";
   $("v-lam").textContent = state.lam.toFixed(2);
@@ -1894,6 +2100,7 @@ function readInputs() {
   if ($("v-gas")) $("v-gas").textContent = state.gas + " 元/GJ";
   if ($("v-pv")) $("v-pv").textContent = state.pv.toFixed(2) + " 元/kWh";
   if ($("v-sh")) $("v-sh").textContent = state.storageHours + " h";
+  if ($("v-orc-cd")) $("v-orc-cd").textContent = state.orcCooldown.toFixed(1) + " K";
 }
 
 /* 地区预置：选中后把该省的官方公开价写进滑块，再重算。
@@ -1932,6 +2139,48 @@ function renderStage(validScene, res) {
   if (res && !res.out_of_scope) {
     $("calc-note").textContent = `当前工况：${validScene["热源温度_degC"]}℃ · ${validScene["流量_kg_s"]} kg/s · ${REV_DEMAND[validScene["需求"]]} · 驱动=${validScene["驱动来源"]} · λ=${state.lam.toFixed(2)}；进入第二级候选：${res.labels.join("、") || "无"}`;
   }
+}
+
+/* 工质适用性面板（P2-10）：把 M1M2 的 25 工质矩阵按当前热源温度"读出来"。
+   注意措辞：矩阵给的是**可选域与上界**，不是本模型的预测值 —— 两者口径不同
+   （矩阵冷凝 30~40℃、25 工质任选、热稳定上限未标定；主表背压 0.5~0.7 MPa、已对拍）。 */
+function renderFluids(t) {
+  const box = $("fluid-panel");
+  const F = window.WHFLUIDS;
+  if (!box) return;
+  if (!F || !F.hasMatrix()) { box.textContent = "（工质矩阵数据未加载）"; return; }
+  const a = F.applicability(t);
+  if (!a) { box.textContent = "—"; return; }
+  const list = F.fluidsAt(t).slice(0, 6);
+  const rows = list.map((f) => `<tr><td>${f.name}</td><td>${f.family}</td>` +
+    `<td>${num(f.tCritC, 0)}</td><td>${num(f.bestEffPct, 2)}</td>` +
+    `<td>${f.vacuum ? "是（需真空级密封）" : "否"}</td>` +
+    `<td class="small">${f.thermalLimit}</td></tr>`).join("");
+  let cmp = "";
+  if (t >= 110 && t <= 350) {
+    const ourEff = eng.orcEffPct(t, 0);
+    const c = F.comparison(t, ourEff);
+    if (c && c.ratio) {
+      cmp = `<p class="small">对照：本模型当前设计效率 <b>${num(ourEff, 2)}%</b>` +
+        `（异丁烷/R245fa 已标定表 + 系统寄生损失），矩阵领先者 ${c.matrixLeader} ` +
+        `<b>${num(c.matrixEffPct, 2)}%</b> —— 相差约 <b>${num(c.ratio, 1)} 倍</b>。` +
+        `差距来自口径，不是"模型不准"：${c.reason}</p>`;
+    }
+  }
+  box.innerHTML =
+    `<div class="stats">` +
+    `<div class="stat"><div class="k">可用工质（物理可行）</div><div class="v">${num(a.fluidCount, 0)}</div><div class="u">种 / 共 25</div></div>` +
+    `<div class="stat"><div class="k">效率口径第一</div><div class="v">${a.effLeader}</div><div class="u">${num(a.effPctInterp, 2)}%</div></div>` +
+    `<div class="stat"><div class="k">比功口径第一</div><div class="v">${a.workLeader}</div><div class="u">${num(a.workKjKg, 1)} kJ/kg</div></div>` +
+    `<div class="stat"><div class="k">真空冷凝工质</div><div class="v">${num(a.vacuumCount, 0)}</div><div class="u">种（工程代价）</div></div>` +
+    `</div>` + cmp +
+    `<table style="margin-top:8px"><thead><tr><th>工质</th><th>族别</th><th>临界温度℃</th>` +
+    `<th>最佳热效率%</th><th>真空冷凝</th><th>热稳定上限</th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<p class="small muted">数据：M1M2 的 25 工质 × 3,740 工况扫描（能量守恒最大偏差 9.1e-13 kW），` +
+    `口径为饱和蒸发 + 5 K 过热、冷凝按水冷 30℃ / 空冷 40℃、膨胀机 0.70~0.90。` +
+    `<b>热稳定性上限一律 [待标定]</b>：本矩阵只保证物理可行域，不是工程可行域；` +
+    `高温端结论会随热稳定约束进一步收缩。HFE7000/7100 不在 CoolProp 内置列表内，未覆盖。` +
+    `矩阵值用于"有哪些工质可选、上界在哪"，主计算仍用已与 DWSIM 对拍过的效率表。</p>`;
 }
 
 function renderTopsis(res) {
@@ -2032,6 +2281,14 @@ function renderTop(res) {
       `泵功＋管路压降）· 实际回收 ${num(d.q, 0)} kW` +
       ` · 口径：按蒸发器出口温度档的中位设计；帕累托理想设计点可达 150.5 kW/MW热（15.1%），` +
       `申报书 11.0~15.1% 指的是后者`;
+    /* 设计点对照（P2-9）：当前设计 vs 功率最优设计点 */
+    const dz = eng.orcOptimalDesign(t, f, medCore, dT);
+    if (dz && dz.best && dz.current.netKw) {
+      sub += ` · 设计点扫描：当前源侧降温 ${num(dz.current.sourceDropK, 1)} K（蒸发 ${num(dz.current.tEvapC, 0)}℃）`
+        + ` 净功率 ${num(dz.current.netKw, 0)} kW；功率最优设计点源侧降温 ${num(dz.best.sourceDropK, 1)} K`
+        + `（蒸发 ${num(dz.best.tEvapC, 0)}℃、回收 ${num(dz.best.qKw, 0)} kW）→ 净功率 ${num(dz.best.netKw, 0)} kW`
+        + `（+${num(dz.gainPct, 0)}%，**未计换热器面积成本**，不可直接当推荐设计）`;
+    }
   } else if (top === "steam_pp") {
     const d = eng.steamDetail(t, f, medCore, hours, dT);
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
@@ -2119,6 +2376,7 @@ function calc() {
   renderStage(v.scene, res);
   renderTop(res);
   renderTopsis(res);
+  renderFluids(Number(v.scene["热源温度_degC"]));
 }
 
 /* ---------------- 实时数据接入（io.js 驱动） ---------------- */
@@ -2577,7 +2835,8 @@ $("btn").addEventListener("click", calc);
 $("preset").addEventListener("change", fillPreset);
 $("cond-search").addEventListener("input", () => drawConds($("cond-search").value));
 [$("in-t"), $("in-f"), $("in-dt"), $("in-h"), $("in-lam"), $("medium"), $("demand"),
- $("in-price"), $("in-heat-h"), $("in-gas"), $("in-pv"), $("in-sh")].forEach((el) => {
+ $("in-price"), $("in-heat-h"), $("in-gas"), $("in-pv"), $("in-sh"),
+ $("in-orc-cd")].forEach((el) => {
   if (!el) return;
   el.addEventListener("input", readInputs);
   el.addEventListener("change", calc);
@@ -2689,9 +2948,54 @@ window.WHLAB_MODEL = (function () {
   var DOMAIN = { min: 100, max: 350 };
   var SINK_C = 25;
 
+  /* ---- 偏置的温度节点（2026-09-28，P2-7）----
+
+     原来偏置是一个**全局标量**：在 250℃ 学到的东西会同样作用到 100℃ 和 350℃。
+     但真实系统里"模型偏在哪"是随温度变的（低温段受工质物性/背压影响，
+     高温段受过热度与压比影响），所以把标量换成分段线性剖面：
+     4 个节点覆盖标定域，节点间线性插值，域外取端点值（不外推）。
+
+     兼容性：如果状态里只有旧的 scalar `bias`（没有 biasNodes），
+     仍然按全局标量处理 —— 老浏览器里存的状态不会失效。 */
+  var NODES = [100, 180, 260, 350];
+
   function table() {
     return (window.HFDATA && window.HFDATA.orcPct) || [];
   }
+
+  function validNodes(nodes) {
+    return !!(nodes && nodes.length >= 2 &&
+      typeof nodes[0][0] === "number" && typeof nodes[0][1] === "number");
+  }
+
+  /* 温度 t 处的偏置（比例）。state.biasNodes 优先；否则退回标量 state.bias */
+  function biasAt(state, t) {
+    var nodes = state && state.biasNodes;
+    if (!validNodes(nodes)) {
+      return (state && typeof state.bias === "number") ? state.bias : 0;
+    }
+    var x = Number(t);
+    if (x <= nodes[0][0]) { return nodes[0][1]; }
+    var last = nodes[nodes.length - 1];
+    if (x >= last[0]) { return last[1]; }
+    for (var i = 0; i < nodes.length - 1; i++) {
+      var a = nodes[i], b = nodes[i + 1];
+      if (x >= a[0] && x <= b[0]) {
+        var span = b[0] - a[0];
+        var w = span > 0 ? (x - a[0]) / span : 0;
+        return a[1] * (1 - w) + b[1] * w;
+      }
+    }
+    return last[1];
+  }
+
+  /* 展示用：标定域中点（225℃）的偏置 = 之前那个"全局偏置"的等价量 */
+  function biasOf(state) {
+    if (state && validNodes(state.biasNodes)) { return biasAt(state, 225); }
+    return (state && typeof state.bias === "number") ? state.bias : 0;
+  }
+
+  function nodeGrid() { return NODES.slice(); }
 
   function baseline(t) {
     var rows = table();
@@ -2712,13 +3016,9 @@ window.WHLAB_MODEL = (function () {
     return last[2];
   }
 
-  function biasOf(state) {
-    return (state && typeof state.bias === "number") ? state.bias : 0;
-  }
-
   function predict(t, state) {
     var base = baseline(t);
-    return base === null ? null : base * (1 + biasOf(state));
+    return base === null ? null : base * (1 + biasAt(state, t));
   }
 
   /* 热效率（比例）：净功率 kW / 回收热 kW */
@@ -2786,6 +3086,9 @@ window.WHLAB_MODEL = (function () {
     SINK_C: SINK_C,
     baseline: baseline,
     predict: predict,
+    biasAt: biasAt,
+    biasOf: biasOf,
+    nodeGrid: nodeGrid,
     efficiency: efficiency,
     carnot: carnot,
     grid: grid,
@@ -2878,28 +3181,38 @@ window.WHLAB_GATES = (function () {
     };
   }
 
-  /* G5 校准不恶化：留出复核集（帕累托解）上的偏差不得变差超过 5%。
+  /* G5 更新幅度受限（**对称**）：全温度域内 |偏置| 不得超过 25%。
 
-     口径说明（2026-09-20 修正措辞）：这里的"留出集"HFDATA.real14 并不是
-     实测数据，它是同一条自研模型链路的帕累托最优解。基准值是设计空间中位，
-     所以这个指标衡量的是"中位设计离前沿最优设计有多远"，不是模型误差。
-     老措辞写成"实测点"，属于把自家模型输出说成实测，已改正。 */
+     ★ 2026-09-28 改（P2-8）。旧 G5 是"在留出复核集上的平均偏差不得变差超过 5%"，
+     而那个留出集（HFDATA.real14）是**帕累托最优解**，系统性高于基准（设计空间中位）。
+     后果是门控**天生不对称**：往上加偏置总能"靠近前沿"，一直加到 G1 卡诺上限才停
+     （实测可到 +74%）；往下减偏置立刻判为"变差"，只能减 1.8% 就被拦。
+     也就是说，遇到真实数据低于模型的情况，模型几乎学不进去 —— 这正是
+     "低值实测点会被误杀"那个缺陷。
+
+     新口径把判据换成**对称的产品约束**：任何温度点的偏置都夹在 ±25% 内。
+     理由：基准表本身是已与 DWSIM 对拍过的保守表，在线更新只应做小幅修正；
+     幅度约束对称地适用于"变高"和"变低"两种情况。
+
+     与前沿的间距仍然计算并展示（calibrationError），但**只作信息项，不参与判定**
+     —— 因为它不是误差，是"中位设计"离"前沿最优设计"的距离。 */
+  var BAND = 0.25;
   function g5(state, prev) {
-    var now = M.calibrationError(state);
-    var before = prev ? M.calibrationError(prev) : now;
-    if (now === null || before === null || before === 0) {
-      return { id: "G5", name: "校准不恶化", pass: false,
-               detail: "缺少留出校准集，无法判定" };
+    var worst = scan(state, function (t) {
+      return { value: Math.abs(M.biasAt(state, t)) };
+    });
+    if (!worst) {
+      return { id: "G5", name: "更新幅度受限", pass: false, detail: "无法计算" };
     }
-    var ratio = now / before;
-    var delta = (ratio >= 1 ? "+" : "") + ((ratio - 1) * 100).toFixed(2);
+    var gap = M.calibrationError(state);
+    var gapText = (gap === null) ? "—" : (gap * 100).toFixed(2) + "%";
     return {
-      id: "G5", name: "校准不恶化",
-      pass: ratio <= 1.05,
-               detail: "留出复核集 " + M.calibrationSetSize() +
-              " 个帕累托解平均偏差 " +
-              (before * 100).toFixed(2) + "% → " + (now * 100).toFixed(2) +
-              "%（容许变差 5%，实际 " + delta + "%）"
+      id: "G5", name: "更新幅度受限（对称）",
+      pass: worst.value <= BAND + 1e-9,
+      detail: "最大偏置 " + (worst.value * 100).toFixed(2) + "%（阈值 ±" +
+              (BAND * 100).toFixed(0) + "%，出现在 " + worst.at + " ℃）" +
+              "；与帕累托前沿（最优设计）的平均间距 " + gapText +
+              "（信息项，不参与判定）"
     };
   }
 
@@ -2914,7 +3227,7 @@ window.WHLAB_GATES = (function () {
     return { results: results, passed: failed.length === 0, failed: failed };
   }
 
-  return { run: run, g1: g1, g2: g2, g3: g3, g4: g4, g5: g5 };
+  return { run: run, g1: g1, g2: g2, g3: g3, g4: g4, g5: g5, BAND: BAND };
 })();
 
 /* 学习实验室的持久化层。
@@ -3037,8 +3350,11 @@ window.WHLAB = (function () {
   var S = window.WHLAB_STORE;
   var MAX_SNAPSHOTS = 10;
 
-  var BASE = { version: "1.0.0", bias: 0, samples: 0, updatedAt: null,
-               note: "交付基线（未经过在线更新）" };
+  /* 2026-09-28（P2-7）：偏置由全局标量改成分段线性剖面（按温度节点），
+     biasNodes 为 [[温度℃, 偏置], …]，nSamples 记录每个节点吃进多少证据。
+     仍保留标量 bias 字段：它等于标定域中点处的偏置，供界面显示与旧状态兼容。 */
+  var BASE = { version: "1.0.0", bias: 0, biasNodes: null, nSamples: null,
+               samples: 0, updatedAt: null, note: "交付基线（未经过在线更新）" };
 
   var state = null;
   var events = [];
@@ -3104,8 +3420,33 @@ window.WHLAB = (function () {
       var residual = predicted ? (observed / predicted - 1) : 0;
       var samples = (prev.samples || 0) + 1;
       var candidate = clone(prev);
-      candidate.bias = ((prev.bias || 0) * (prev.samples || 0) + residual) / samples;
       candidate.samples = samples;
+      /* ---- 按温度节点做局部更新（P2-7）----
+         温度节点取模型层的 NODES（100/180/260/350℃，间距 80~90℃），
+         新点按"三角核"分给相邻节点：离得越近权重越大，超出 90℃ 的节点不动。
+         每个节点内部做加权指数平均（等价于"每节点自己的样本量"），
+         这样同一节点反复喂点会逐渐收敛，而不是被最后一次观测带跑。 */
+      var grid = M.nodeGrid ? M.nodeGrid() : [100, 180, 260, 350];
+      var nodes = (function () {
+        var src = (prev.biasNodes && prev.biasNodes.length === grid.length)
+          ? prev.biasNodes : grid.map(function (g) { return [g, prev.bias || 0]; });
+        return src.map(function (p) { return [p[0], p[1]]; });
+      })();
+      var nSamples = (prev.nSamples && prev.nSamples.length === grid.length)
+        ? prev.nSamples.slice()
+        : grid.map(function () { return Math.max(prev.samples || 0, 0); });
+      var RADIUS = 90.0;
+      for (var i = 0; i < nodes.length; i++) {
+        var w = Math.max(0, 1 - Math.abs(nodes[i][0] - t) / RADIUS);
+        if (w <= 0) { continue; }
+        var n = nSamples[i];
+        nodes[i][1] = (nodes[i][1] * n + w * residual) / (n + w);
+        nSamples[i] = n + w;
+      }
+      candidate.biasNodes = nodes;
+      candidate.nSamples = nSamples;
+      /* 兼容字段：标定域中点处的偏置 */
+      candidate.bias = M.biasOf ? M.biasOf(candidate) : 0;
 
       var verdict = G.run(candidate, prev, { t: t, observed: observed });
 
@@ -3140,6 +3481,7 @@ window.WHLAB = (function () {
           predicted: predicted, residual: residual,
           from: prev.version, to: state.version,
           biasFrom: prev.bias, biasTo: state.bias,
+          biasNodesTo: state.biasNodes,   /* 按温度节点的偏置剖面（P2-7） */
           gates: verdict.results, failed: [],
           reason: "五道门控全部通过"
         });
@@ -3439,13 +3781,24 @@ window.VIEW_AFTER.learning = function () {
 
   function renderState() {
     var s = L.current();
+    /* 偏置剖面（P2-7）：把 4 个温度节点的偏置显示出来——以前只有一个全局数字，
+       看不出"模型在哪一段偏"。 */
+    var grid = M.nodeGrid ? M.nodeGrid() : [100, 180, 260, 350];
+    var nodes = (s.biasNodes && s.biasNodes.length === grid.length)
+      ? s.biasNodes : grid.map(function (g) { return [g, s.bias || 0]; });
+    var profile = nodes.map(function (p) {
+      return p[0] + "℃ " + (p[1] >= 0 ? "+" : "") + (p[1] * 100).toFixed(1) + "%";
+    }).join(" · ");
     el("lab-state").innerHTML =
       statCard("v" + s.version, "模型版本") +
       statCard((s.bias >= 0 ? "+" : "") + (s.bias * 100).toFixed(2) + "%",
-               "效率偏置修正") +
+               "效率偏置（域中点 225℃）") +
       statCard(String(s.samples), "已吸收的观测点") +
       statCard(s.updatedAt ? s.updatedAt.slice(0, 19).replace("T", " ") : "—",
-               "最近更新");
+               "最近更新") +
+      '<div class="stat" style="grid-column:1/-1"><span class="value" ' +
+      'style="font-size:13px">' + window.esc(profile) + '</span>' +
+      '<span class="label">偏置随温度变化（分段线性，域外取端点值、不外推）</span></div>';
     el("lab-storage").innerHTML =
       '<span>存储：' + (L.memoryOnly()
         ? '<span class="chip red">仅内存（刷新即丢失）</span>'
@@ -3538,7 +3891,11 @@ window.VIEW_AFTER.learning = function () {
       var head = r.accepted
         ? '<div class="note"><strong>更新已生效</strong>，模型版本 ' +
           window.esc(r.state.version) + '，效率偏置 ' +
-          (r.state.bias * 100).toFixed(2) + '%。</div>'
+          (r.state.bias * 100).toFixed(2) + '%（域中点）；温度节点剖面 ' +
+          window.esc((r.state.biasNodes || []).map(function (p) {
+            return p[0] + '℃ ' + (p[1] >= 0 ? '+' : '') +
+              (p[1] * 100).toFixed(1) + '%';
+          }).join(' / ')) + '。</div>'
         : '<div class="note warn"><strong>更新被拒绝</strong>：' +
           window.esc(r.reason) + '。模型版本保持 ' +
           window.esc(r.state.version) + ' 不变。</div>';
