@@ -242,6 +242,12 @@ window.WHFLUIDS = (function () {
   };
 })();
 
+/* 膨胀机效率-规模关系 —— 由 tools/turbine_size_fit.py 生成，勿手改。
+   数据：Landelle 实验 ORC 数据库（真实机组实测 η_t 与发电功率）。
+   用途：给代理模型补上'规模'这一维（小机组膨胀机效率更低）。
+*/
+window.WHTURBINE_SIZE = { "meta": { "source": "Landelle Experimental ORC database（Zenodo 10.5281/zenodo.400556, CC BY 4.0）—项目内 38 台机组子集", "n": 38, "note": "分档中位为实测；>100 kW 无实验数据，按 100 kW 档保持（不外推）", "referenceEtaT": 0.7897, "rule": "只做保守修正：correction = min(1, η_t(size)/0.80)（不给大机组加成）", "fit": { "intercept": 0.7201, "slope": 0.0374 } }, "bands": [ [ 0.1, 1, 0.7, 12 ], [ 1, 5, 0.7645, 18 ], [ 5, 20, 0.71, 5 ], [ 20, 100, 0.685, 3 ] ] };
+
 /* decision engine v2.1 -> JS 移植（路径筛选、指标公式、红线照 11_决策内核v2_全温域/decision_core.py）
    ⚠ 与 Python 内核的**一处已知差异**（2026-09-27 证据链体检查出，尚未对齐）：
      排序权重本文件用「AHP 主观权重 + 熵权」按 λ 混合（默认 λ=0.5，界面可调），
@@ -1158,13 +1164,44 @@ window.WHENG = (function () {
 
   /* 指定设计蒸发温度下的 ORC 交付净效率（%，已扣泵功与管路压降）——
      设计点扫描（P2-9）用这个入口。 */
+  /* ---- 规模维度：膨胀机效率随机组变小而下降（2026-09-28，P2-6）----
+
+     原来的代理模型没有"规模"输入：效率表来自固定 η_t ∈ {0.70…0.90} 的均匀网格，
+     其隐含的等效膨胀机等熵效率是 **0.7897**（M1M2 二分反解值，见
+     `M1M2/results/回灌决策内核_膨胀机效率影响.md`）。而真实机组的膨胀机效率是随
+     规模变的——Landelle 实验 ORC 数据库（CC BY 4.0）38 台有 η_t 与发电功率的机组拟合：
+
+         η_t(P) = 0.720 + 0.037 · log10(P[kW])       （P = 净电功率）
+         分档实测中位：≤1 kW 0.700（n=12）、1~5 kW 0.764（n=18）、
+                       5~20 kW 0.710（n=5）、20~100 kW 0.685（n=3）
+
+     本层只用**保守方向**：correction = min(1, η_t(P)/0.7897)
+     → 1 kW 0.91、5 kW 0.94、20 kW 0.97、≥100 kW 1.00（不给大机组加成，
+       因为 >100 kW 没有实验数据可依）。 */
+  const ETA_T_REF = 0.7897;
+  function turbineEtaOf(capKw) {
+    const M = window.WHTURBINE_SIZE;
+    const p = Math.max(Number(capKw) || 0, 1e-3);
+    if (M && M.meta && M.meta.fit) {
+      const v = M.meta.fit.intercept + M.meta.fit.slope * Math.log10(p);
+      return Math.min(Math.max(v, 0.55), 0.90);
+    }
+    return ETA_T_REF;
+  }
+  function turbineSizeFactor(capKw) {
+    return Math.min(1.0, turbineEtaOf(capKw) / ETA_T_REF);
+  }
+
   function orcNetEffByEvap(tEvapC, qKw) {
     const e0 = orcEffByEvapTemp(tEvapC);
     if (e0 === null || e0 === undefined) return null;
-    const P = window.WHPARASITIC;
-    if (!P || !P.hasTable("orc")) return e0;
+    /* 先按规模折膨胀机效率，再扣系统寄生损失（两者的规模依赖来自不同证据：前者实测
+       机组效率、后者实测泵功与压降） */
     const cap0 = Math.max(Number(qKw) * e0 / 100.0, 1e-6);
-    return e0 - P.lossPct("orc", clamp(Number(tEvapC), 60, 360), cap0);
+    const eSize = e0 * turbineSizeFactor(cap0);
+    const P = window.WHPARASITIC;
+    if (!P || !P.hasTable("orc")) return eSize;
+    return eSize - P.lossPct("orc", clamp(Number(tEvapC), 60, 360), cap0);
   }
   /* 修正量本身（百分点），供界面/文档展示 */
   function parasiticPct(path, tSrc, qKw, dT) {
@@ -1627,7 +1664,7 @@ window.WHENG = (function () {
     topsis, runDecision, boundaryNotices, orcEffPct, steamEffPct,
     netEffPct, parasiticPct,
     orcEffByEvapTemp, orcNetEffByEvap, orcDesignScan, orcOptimalDesign, orcCooldownK,
-    orcDesignEvapTemp,
+    orcDesignEvapTemp, turbineEtaOf, turbineSizeFactor, ETA_T_REF,
     orcDetail, steamDetail, heatDetail, pctLookupRow
     , orcRecoveredKw, steamRecoveredKw, qForPath, orcEvapTemp
     , ORC_COOLDOWN_K, STEAM_EXHAUST_FLOOR_C, HEAT_MIN_COOLDOWN_K, heatFloor
