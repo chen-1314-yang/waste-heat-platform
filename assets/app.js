@@ -14,6 +14,121 @@ window.linkOrText = function (url, label) {
          window.esc(label || url) + '</a>';
 };
 
+/* 系统寄生损失修正表 —— 由 tools/parasitic_scan.py 生成，勿手改。
+
+   每行：[温度℃, 泵功 kJ/kg, 吸热量 kJ/kg, 泵压升 Pa, 泵入口液相密度 kg/m3, 档内点数]
+   温度档：ORC＝蒸发器出口温度；蒸汽＝锅炉出口温度。统计量＝档内所有可行工况的中位数。
+   etaPCurve 是「泵总效率（等熵×电机）— 机组净电功率」的工程折线，见生成脚本头部说明。
+*/
+window.WHPARASITIC_TABLE = { "unit": "wp/qin kJ/kg·(kg/s=1)；dp Pa；rho kg/m3", "meta": { "source": "CoolProp 循环模型重算（与 03_程序代码/cycle_models.py 同一状态方程）", "note": "效率表内部假设 泵等熵效率 0.80、忽略管道压损；本表给出各温度档的中位状态量", "etaPCurve": [ [ 1.0, 0.28 ], [ 5.0, 0.33 ], [ 20.0, 0.4 ], [ 50.0, 0.45 ], [ 100.0, 0.5 ], [ 300.0, 0.57 ], [ 1000.0, 0.62 ], [ 5000.0, 0.68 ] ], "etaFloor": 0.25, "etaCeil": 0.7, "generatedBy": "tools/parasitic_scan.py" }, "orc": [ [ 60.0, 0.1445, 198.258, 150000.0, 1296.93, 25 ], [ 70.0, 0.2409, 217.24, 250000.0, 1280.57, 75 ], [ 80.0, 0.3372, 234.033, 350000.0, 1265.86, 125 ], [ 90.0, 0.7712, 315.043, 525000.0, 911.51, 200 ], [ 100.0, 1.3738, 393.042, 725000.0, 557.16, 300 ], [ 110.0, 1.8312, 400.857, 825000.0, 550.73, 350 ], [ 120.0, 2.2883, 414.822, 1000000.0, 544.84, 400 ], [ 130.0, 3.3261, 401.348, 1400000.0, 534.24, 325 ], [ 140.0, 3.7999, 425.587, 1600000.0, 529.39, 375 ], [ 150.0, 3.7999, 457.888, 1600000.0, 529.39, 375 ], [ 160.0, 4.9805, 502.673, 2100000.0, 524.77, 250 ], [ 170.0, 4.9805, 529.651, 2100000.0, 524.77, 250 ], [ 180.0, 4.9805, 556.589, 2100000.0, 524.77, 250 ], [ 190.0, 4.9805, 583.576, 2100000.0, 524.77, 250 ], [ 200.0, 4.9805, 610.355, 2100000.0, 524.77, 250 ], [ 210.0, 4.9805, 637.574, 2100000.0, 524.77, 250 ], [ 220.0, 4.9805, 664.591, 2100000.0, 524.77, 250 ], [ 230.0, 4.9805, 692.042, 2100000.0, 524.77, 250 ], [ 240.0, 4.9805, 719.715, 2100000.0, 524.77, 250 ], [ 250.0, 4.9805, 747.63, 2100000.0, 524.77, 250 ], [ 260.0, 4.9805, 775.774, 2100000.0, 524.77, 250 ], [ 270.0, 4.9805, 804.184, 2100000.0, 524.77, 250 ], [ 280.0, 4.9805, 832.9, 2100000.0, 524.77, 250 ], [ 290.0, 4.9805, 861.891, 2100000.0, 524.77, 250 ], [ 300.0, 4.9805, 891.16, 2100000.0, 524.77, 250 ], [ 310.0, 4.9805, 920.71, 2100000.0, 524.77, 250 ], [ 320.0, 4.9805, 950.542, 2100000.0, 524.77, 250 ], [ 330.0, 4.9805, 980.655, 2100000.0, 524.77, 250 ], [ 340.0, 4.9805, 1010.968, 2100000.0, 524.77, 250 ], [ 350.0, 4.9805, 1041.718, 2100000.0, 524.77, 250 ] ], "steam": [ [ 180.0, 0.9965, 2584.53, 788000.0, 988.26, 25 ], [ 220.0, 1.627, 2645.28, 1288000.0, 988.26, 75 ], [ 260.0, 2.5135, 2701.563, 1988000.0, 988.26, 125 ], [ 300.0, 3.777, 2766.605, 2988000.0, 988.26, 175 ], [ 340.0, 4.4043, 2845.265, 3482500.0, 988.26, 200 ], [ 380.0, 4.4043, 2939.942, 3482500.0, 988.26, 200 ], [ 420.0, 4.4043, 3042.45, 3482500.0, 988.26, 200 ], [ 460.0, 4.4043, 3131.11, 3482500.0, 988.26, 200 ], [ 500.0, 4.4043, 3223.828, 3482500.0, 988.26, 200 ], [ 540.0, 4.4043, 3314.674, 3482500.0, 988.26, 200 ] ] };
+
+/* 系统寄生损失修正（工质泵 + 管路压降）—— 2026-09-28 新增（P1-1）
+
+   ## 为什么要有这一层
+
+   效率表（src/legacy/eff_table_override.js）来自纯热力学循环模型，它的假设写在
+   03_程序代码/cycle_models.py 头部：**泵等熵效率 0.80、忽略管道压损与散热**。
+   也就是说那张表算的是"理想循环的净输出"，而真实机组还要多付两笔：
+     ① 泵本身效率远低于 0.80（小机组尤其低），而且电机还有损耗；
+     ② 管路/换热器/阀门的压降要额外加压升。
+
+   两条实测反证（第五轮外部检索）：
+     · MDPI 2019 小涡旋 ORC 台架：仿真 8.2% vs 实测 6.8%（**高 17%**），
+       作者归因就是漏算泵功与管路压降；
+     · FlexGeo 可逆机组实测（Zenodo 10.5281/zenodo.20830203）：工质泵中位 407 W、
+       膨胀机轴功率中位 1 963 W（p_high 9.05 bar、p_low 2.59 bar、230.7 g/s）——
+       按理想公式只有约 115 W，反算"泵等熵×电机"总效率仅约 **0.28**。
+
+   ## 这一层怎么算
+
+      泵真实功 = (泵压升 + 管路压降允许量) ÷ (液相密度 × 泵总效率)     [kJ/kg]
+      效率修正 = 100 × (泵真实功 − 表中泵功) ÷ 吸热量                  [百分点]
+      交付净效率 = 效率表值 − 效率修正
+
+   泵压升、吸热量、液相密度都取自生成表（每个温度档的中位数，与效率表同口径）；
+   泵总效率按"机组净电功率"查工程折线（表内 meta.etaPCurve）。
+
+   ⚠ 诚实性边界（已登记在边界页）：
+     · 泵总效率折线只有两个实测锚点（2 kW 级 0.28）＋ 大机组工程惯例，
+       属**工程假设**，不是实测标定；
+     · 管路压降允许量 100 kPa 是**工程允许量**（典型 50~200 kPa），不是某个项目的实测值；
+     · 本层只修正"电输出类"路径（ORC、蒸汽朗肯）。用热类路径的输配泵电耗未计入，
+       属已知未闭合项。
+*/
+window.WHPARASITIC = (function () {
+  "use strict";
+
+  const T = window.WHPARASITIC_TABLE || { orc: [], steam: [], meta: {} };
+  const META = T.meta || {};
+  const CURVE = META.etaPCurve || [[1, 0.28], [5000, 0.68]];
+  const ETA_FLOOR = META.etaFloor || 0.25;
+  const ETA_CEIL = META.etaCeil || 0.70;
+
+  /* 管路 + 换热器 + 阀门的压降允许量（Pa）。典型值 50~200 kPa，取 100 kPa。
+     来源：工程允许量，非项目实测。敏感性见 docs/2026-09-28-P1批次_精度与口径修正.md */
+  const DP_EXTRA_PA = 100e3;
+
+  function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+
+  /* 按温度查表并线性插值：[温度℃, 泵功 kJ/kg, 吸热量 kJ/kg, 泵压升 Pa, 密度 kg/m3, n] */
+  function lookup(rows, t) {
+    if (!rows || !rows.length) return null;
+    if (t <= rows[0][0]) return rows[0];
+    if (t >= rows[rows.length - 1][0]) return rows[rows.length - 1];
+    for (let i = 0; i < rows.length - 1; i++) {
+      if (t >= rows[i][0] && t <= rows[i + 1][0]) {
+        const f = (t - rows[i][0]) / ((rows[i + 1][0] - rows[i][0]) || 1);
+        return rows[i].map(function (v, j) {
+          return j === 5 ? rows[i][5] : v + (rows[i + 1][j] - v) * f;
+        });
+      }
+    }
+    return rows[rows.length - 1];
+  }
+
+  /* 泵总效率（等熵 × 电机）：随"机组净电功率 kW"对数插值 */
+  function pumpEta(powerKw) {
+    const p = Math.max(Number(powerKw) || 1.0, 1e-6);
+    let v;
+    if (p <= CURVE[0][0]) v = CURVE[0][1];
+    else if (p >= CURVE[CURVE.length - 1][0]) v = CURVE[CURVE.length - 1][1];
+    else {
+      v = CURVE[CURVE.length - 1][1];
+      for (let i = 0; i < CURVE.length - 1; i++) {
+        if (p >= CURVE[i][0] && p <= CURVE[i + 1][0]) {
+          const f = (Math.log10(p) - Math.log10(CURVE[i][0])) /
+            (Math.log10(CURVE[i + 1][0]) - Math.log10(CURVE[i][0]));
+          v = CURVE[i][1] + (CURVE[i + 1][1] - CURVE[i][1]) * f;
+          break;
+        }
+      }
+    }
+    return clamp(v, ETA_FLOOR, ETA_CEIL);
+  }
+
+  /* 修正量（百分点）。kind: "orc" | "steam"；tDesign: 设计蒸发/锅炉出口温度℃；
+     netCapKw: 修正前算得的净电功率（作为"泵所在机组规模"的代理量）。 */
+  function lossPct(kind, tDesignC, netCapKw) {
+    const row = lookup(T[kind], Number(tDesignC));
+    if (!row) return 0.0;
+    const wpTable = row[1], qin = row[2], dp = row[3], rho = row[4];
+    if (!(qin > 0) || !(rho > 0)) return 0.0;
+    const eta = pumpEta(netCapKw);
+    const wReal = (dp + DP_EXTRA_PA) / (rho * eta) / 1000.0;   // kJ/kg
+    const loss = 100.0 * (wReal - wpTable) / qin;
+    return loss > 0 ? loss : 0.0;
+  }
+
+  function hasTable(kind) {
+    return !!(T[kind] && T[kind].length);
+  }
+
+  return {
+    DP_EXTRA_PA: DP_EXTRA_PA, META: META,
+    lookup: lookup, pumpEta: pumpEta, lossPct: lossPct, hasTable: hasTable
+  };
+})();
+
 /* decision engine v2.1 -> JS 移植（路径筛选、指标公式、红线照 11_决策内核v2_全温域/decision_core.py）
    ⚠ 与 Python 内核的**一处已知差异**（2026-09-27 证据链体检查出，尚未对齐）：
      排序权重本文件用「AHP 主观权重 + 熵权」按 λ 混合（默认 λ=0.5，界面可调），
@@ -161,6 +276,10 @@ window.WHENG = (function () {
   const OPEX_RATE = { comp: 0.05, comp_cool: 0.05, abs_self: 0.05, abs_ext: 0.05 };
   const OPEX_RATE_DEFAULT = 0.04;
 
+  /* 电加热（电极/电阻锅炉、电热风）效率：用于储热"峰谷套利"口径的价值折算
+     （替代峰段电加热时，1 kWh 热需要 1/0.95 kWh 电）。工程取值，已登记。 */
+  const ELEC_HEAT_ETA = 0.95;
+
   /* 技术成熟度门槛（2026-09-27 新增）：TRL < 6 的路径不进推荐池。
      起因：热化学储热经两轮检索确认——全球仍在实验室/中试（TRL 3~5），
      不存在带投资额的项目，所以它不该和已商业化路径同表比经济性，
@@ -206,18 +325,55 @@ window.WHENG = (function () {
      中位数 0.6844 ≈ 0.68，区间 0.55~0.72。原默认 0.65 取两省偏保守值，
      现按 9 省中位取 0.68（界面仍可调 0.30~0.80）。 */
   let PRICES = { elec: 0.68, heatingHours: HEATING_SEASON_HOURS,
-                 heatPrice: 98.0, valleyElec: 0.35 };
+                 heatPrice: 98.0, valleyElec: 0.35,
+                 /* 峰谷价差（元/kWh）与储热口径参数，2026-09-28 新增（P1-4/P1-5）。
+                    峰谷价差默认 0.95 元/kWh：第二轮外部检索拿到 11 省分时电价价差
+                    （山东 0.95、浙江 1.35/1.40、广东珠三角 1.35、上海 1.65、湖南 1.61、
+                     江苏 0.92、四川 0.81、河南 0.75、北京 0.54、福建 0.52），
+                    去掉重复项后中位约 0.94，取山东值 0.95 作默认。 */
+                 peakValley: 0.95,
+                 /* 储热收益口径："heat"＝售热（替代燃料，原口径）、
+                    "arbitrage"＝峰谷套利（替代峰段电加热）、"stack"＝两者叠加（见注意事项）、
+                    "off"＝不计收益（只做技术展示）。 */
+                 storageMode: "heat",
+                 /* 充热方式："valley"＝谷电充热（要付谷段电费与效率损失）、
+                    "waste"＝余热直接充热（充热本身不花钱，只忽略泵电耗）。
+                    默认 "waste"：本平台的场景前提是"用回收的余热充热"；
+                    工况库那行"电加热熔盐（谷电充热）"属于前者，评价该行时请切换。 */
+                 storageCharge: "waste",
+                 /* 峰段等效满功率放电小时：按每天 4~5 h 峰段计，全年约 1,500 h。
+                    为什么不能沿用工况库的 6,000 h：那是"余热可用小时"，
+                    而储热的年吞吐量取决于**峰段时长×每日循环次数**。 */
+                 storageHours: 1500 };
   function setPrices(p) {
     if (!p) return;
     if (p.elec > 0) PRICES.elec = Number(p.elec);
     if (p.heatingHours > 0) PRICES.heatingHours = Number(p.heatingHours);
     if (p.heatPrice > 0) PRICES.heatPrice = Number(p.heatPrice);
     if (p.valleyElec > 0) PRICES.valleyElec = Number(p.valleyElec);
+    if (p.peakValley >= 0) PRICES.peakValley = Number(p.peakValley);
+    if (p.storageHours > 0) PRICES.storageHours = Number(p.storageHours);
+    if (p.storageMode && ["heat", "arbitrage", "stack", "off"].indexOf(p.storageMode) >= 0) {
+      PRICES.storageMode = p.storageMode;
+    }
+    if (p.storageCharge && ["valley", "waste"].indexOf(p.storageCharge) >= 0) {
+      PRICES.storageCharge = p.storageCharge;
+    }
   }
   function elecPrice() { return PRICES.elec; }
   function heatingHoursCap() { return PRICES.heatingHours; }
   function heatPrice() { return PRICES.heatPrice; }
   function valleyElec() { return PRICES.valleyElec; }
+  function peakValley() { return PRICES.peakValley; }
+  function storageRevenueMode() { return PRICES.storageMode; }
+  function storageChargeMode() { return PRICES.storageCharge; }
+  /* 储热的年等效满功率放电小时（不超过用户填的年运行小时） */
+  function storageHoursOf(hours) {
+    const h = Number(hours);
+    const cap = PRICES.storageHours;
+    if (!(h > 0)) return cap;
+    return Math.min(h, cap);
+  }
 
   /* 经济性标定状态。为什么要分级：台账 §5 自己写明——
      直接换热/余热锅炉的投资回收期是"工程估算"，储热/TEG 是"示意"。
@@ -258,7 +414,14 @@ window.WHENG = (function () {
        与负荷率折减，登记为对照点而非改用值。 */
     direct: "sourced",
     tc_storage: "pending", // 台账 §5："示意"
-    pcm_storage: "pending",
+    /* 相变储热 2026-09-28 由 pending 升为 sourced（P1-4）：
+       此前卡住的两件事现在都有了明确口径——
+       ① 投资：165 万元/MW装机 = 200~500 元/kWh（科技导报 2025 表 5 + Frontiers 2025
+          双来源）× 国内真 PCM 项目 5.5 h 储能量/充电功率配比；
+       ② 收益：三套可选口径都已写成显式公式（售热 / 峰谷套利 / 叠加），
+          年吞吐量按"峰段等效放电小时"，充热方式（谷电/余热）也做成参数。
+       口径本身是场景选择，不是市场观测值 —— 这一点写在边界页与界面上。 */
+    pcm_storage: "sourced",
   };
   const GRID_EF = 0.581;
   const GAS_EF = 0.0561;
@@ -430,16 +593,50 @@ window.WHENG = (function () {
      也会让 COP 趋于无穷。 */
   const HP_ETA_CARNOT = 0.5;
   const HP_APPROACH_K = 5.0;
-  /* 小温升时的上限保护。常系数 η 的卡诺外推在小温升处会过高：
-     例如热源 65℃→冷凝 90℃（温升 25 K）算得 COP 7.26，而工业热泵产品在这个
-     温升下的实测 COP 大约 4~5。两个标定点（ΔT=80K→η0.465、ΔT=60K→η0.59）
-     不足以拟合小温升趋势，故设上限 6.0 —— **这是工程判断，不是文献值**，
-     已在边界页登记：拿到一个"小温升（20~30 K）实测 COP"的真实机型数据后即可替换。 */
-  /* 上限值 2026-09-27 由 6.0 下调到 5.5：第三轮检索拿到小温升实测窗口——
-     R515B 变频涡旋实验样机（热源 50℃，出水 70→85℃）COP 4.48→3.25（温升 20→35 K）；
-     大型机组 KOBELCO HEMⅢ-HR95WZ 在 30~35 K 温升处 COP 5.3。窗口内真实值 4.0~5.3，
-     未见稳定超过 5.5 的实测值，故封顶取 5.5。 */
-  const HP_COP_MAX = 5.5;
+  /* ---- 上限保护：由"拍的常数"改成**实测包络**（2026-09-28，P1-2）----
+
+     为什么必须封顶：常系数 η=0.5 的卡诺外推在小温升处会发散——
+     热源 65℃→冷凝 90℃（模型口径温升 25 K）算得 COP 7.26，而实测机组在这个
+     温升下是 4~5。以前用一条"工程判断"的常数 5.5 封顶；现在改成实测包络。
+
+     实测点（温升按本模型口径换算：冷凝温度 − 蒸发温度 = 需求−热源+2×端差）：
+       · KOBELCO HEMⅢ-HR95WZ **大型机组**：热水温升 30~35 K 处 COP **5.3**
+         → 模型口径温升 40~45 K
+       · R515B 变频涡旋**实验样机**：热源 50℃、出水 70→85℃，COP 4.48→3.25
+         （热水温升 20→35 K → 模型口径 30~45 K）
+       · 珠海某产品样本：热源 65℃ → 出水 125℃、COP **3.92**（模型口径 70 K）
+       · 丹麦能源署工艺加热算例：热源 60℃ → 供汽 140℃、COP≈**2.4**（模型口径 90 K）
+
+     包络取"同一温升区段里不同机型的**上界**"，且必须随温升单调不增
+     （COP 不可能在温升变大时反而变高）：
+       温升 ≤45 K → 5.3（该区段上界）
+       → 3.92（70 K）→ 2.4（90 K 及以上保持）
+     R515B 样机在 45 K 处只有 3.25，而大型机组同区段有 5.3 —— 取 5.3 意味着
+     本包络**不保证小机组能达到**。小机组的 COP 折减还没有数据，
+     已登记为待标定项（拿到小机组实测即补）。
+
+     ⚠ 诚实性：η=0.5 本身在实测区间内（按 5 K 端差统一反算，四个实测点的
+     η = 0.39（R515B 小温升）/ 0.40（R515B 大温升）/ 0.68（珠海样本）/ 0.52（DEA 算例），
+     中位约 0.5）——所以 η 不再改，改的是小温升处的**上限**。 */
+  const HP_COP_ENVELOPE = [
+    [45.0, 5.30],   // KOBELCO 大型机组（该区段上界；R515B 样机同点只有 3.25）
+    [70.0, 3.92],   // 珠海产品样本
+    [90.0, 2.40]    // 丹麦能源署工艺加热算例
+  ];
+  function hpCopEnvelope(liftK) {
+    const p = HP_COP_ENVELOPE;
+    const l = Number(liftK);
+    if (!(l > 0)) return p[0][1];
+    if (l <= p[0][0]) return p[0][1];
+    if (l >= p[p.length - 1][0]) return p[p.length - 1][1];
+    for (let i = 0; i < p.length - 1; i++) {
+      if (l >= p[i][0] && l <= p[i + 1][0]) {
+        const f = (l - p[i][0]) / (p[i + 1][0] - p[i][0]);
+        return p[i][1] + (p[i + 1][1] - p[i][1]) * f;
+      }
+    }
+    return p[p.length - 1][1];
+  }
 
   /* 热泵要送到的温度：按需求类型给默认值（与 stage1 里各需求的默认温度一致） */
   function compSupplyTemp(scene) {
@@ -463,15 +660,38 @@ window.WHENG = (function () {
     const tc = tEvapC + 273.15;
     const copRaw = HP_ETA_CARNOT * th / (th - tc);
     if (!(copRaw > 1.0)) return null;
-    const cop = Math.min(copRaw, HP_COP_MAX);
+    const liftK = tCondC - tEvapC;
+    const cap = hpCopEnvelope(liftK);
+    const cop = Math.min(copRaw, cap);
     return { cop: cop, copRaw: copRaw, capped: cop < copRaw - 1e-9,
-             tEvapC: tEvapC, tCondC: tCondC };
+             cap: cap, liftK: liftK, tEvapC: tEvapC, tCondC: tCondC };
   }
 
   /* 年产出价值（万元 / MW装机·年）。口径见 ECON_GRADE 上方说明。 */
   function annualValueWanMw(path, hours) {
     if (path === "orc" || path === "steam_pp" || path === "teg") {
       return hours * elecPrice() * 1000.0 / 10000.0;                 // 每 MW 电装机
+    }
+    /* ---- 储热类：收益口径由"替代天然气"单一算法改为可选两套算法（2026-09-28 P1-4）----
+       背景：储热只做时间搬移、不产出热量，它的收益取决于**替代什么基准**：
+         口径 A「售热/替代燃料」：放出的热按热价卖（或替代燃气锅炉）→ 与直接换热同口径；
+         口径 B「峰谷套利」：谷段充电、峰段放热，替代的是**峰段电加热**
+                （电加热效率按 0.95），价值 = 放热量 × 峰段电价 ÷ 0.95；
+               峰段电价 = 谷电价 + 峰谷价差（11 省分时电价数据）。
+       两套算法算的是**不同基准下的价值**，不是可以无条件相加的两笔收益：
+         · 叠加口径（stack）只在"卖热给用户"与"该用户原本用峰段电加热"同时成立时有效，
+           否则等于把同一份热按两个基准各卖一次 —— 界面与边界页都写明这一点。
+       年吞吐量按「峰段等效满功率放电小时」计（默认 1,500 h ≈ 每天 4~5 h 峰段），
+       不沿用工况库的 6,000 h（那是余热可用小时，不是储热的年循环小时）。 */
+    if (path === "tc_storage" || path === "pcm_storage") {
+      const sh = storageHoursOf(hours);
+      const heatVal = sh * 3.6 * heatPrice() / 10000.0;
+      const arbVal = sh * 1000.0 * (valleyElec() + peakValley()) / ELEC_HEAT_ETA / 10000.0;
+      const mode = storageRevenueMode();
+      if (mode === "off") return 0.0;
+      if (mode === "arbitrage") return arbVal;
+      if (mode === "stack") return heatVal + arbVal;
+      return heatVal;
     }
     // 制冷类（吸收式与电压缩）：产出是冷量，价值按"替代电制冷的电耗"算，
     // 与减排列 coolingAbsReduction 的口径一致（Q_cold ÷ COP_E × 电价）。
@@ -500,7 +720,10 @@ window.WHENG = (function () {
        注：若某项目是"余热直接充热"（不耗电），应把谷电价调到接近 0 再评估。 */
     if (path === "tc_storage" || path === "pcm_storage") {
       const eff = path === "tc_storage" ? 0.70 : 0.75;   // 与能效列的储放热效率一致
-      return (1.0 / eff) * hours * valleyElec() * 1000.0 / 10000.0;
+      /* 充电量按"峰段等效放电小时"计（2026-09-28 P1-4）：储热的年循环量由峰段
+         时长决定，不是余热可用小时。口径 B（套利）下充电成本同样按谷电算。 */
+      if (storageChargeMode() === "waste") return 0.0;   // 余热直接充热：不计电费
+      return (1.0 / eff) * storageHoursOf(hours) * valleyElec() * 1000.0 / 10000.0;
     }
     return 0.0;
   }
@@ -518,10 +741,66 @@ window.WHENG = (function () {
     return investWanMw / net;
   }
 
+  /* 收益覆盖不了运行成本时的"回收期占位值"。
+     为什么需要：有出处的路径回收期改成公式现算后，可能出现 net ≤ 0
+     （最典型：谷电充热的储热按"售热"口径算 —— 充电 0.47 元/kWh热、卖热 0.35 元/kWh热，
+     必然亏）。这时不能退回那个没有出处的常数，也不能留空（TOPSIS 会算成 NaN），
+     统一记 99 年，界面显示为"—（收益不足以覆盖运行成本）"。 */
+  const NO_PAYBACK_YEARS = 99.0;
+
   function absCoolCop(t) {
     if (t >= 85.0) return 0.7;
     if (t >= ABS_COOL_T_MIN) return 0.6;
     return null;
+  }
+
+  /* ---- 二类吸收式（升温型热泵）COP：由常数改成连续曲线（2026-09-28，P1-3）----
+
+     原来只有一个常数 0.45（工艺蒸汽用）＋ 一句"单级 0.45 / 两级 0.30"的提示文字，
+     模型本身不区分温升与驱动温度。实测与标准数据是够画一条曲线的：
+
+       · 23 K 温升下，驱动温度 65 / 70 / 75℃ → COP 0.425 / 0.44 / 0.45
+         （温升一样、驱动温度越高 COP 越高）
+       · 三洋行业样本：85℃ 驱动、35~40 K 温升 → COP 0.47~0.48
+       · 工信部 2021 指南：单级 +30~40 K → 0.45~0.48；两级 +40~60 K → 0.30
+       · GB/T 报批稿限定值：单级 ≥0.44、两级 ≥0.28
+
+     拟合分两段（不引入新参数，全部由上面四个数据点定）：
+       ① 基准值随驱动温度插值：60→0.408、65→0.425、70→0.4375、75→0.45、85→0.475、95→0.48
+       ② 温升折减：温升 ≤40 K 不折减；40→60 K 线性降到 0.30（两级段）
+     适用区间：驱动 60~95℃、温升 10~60 K（超出取端点值，并夹在 0.28~0.50）。 */
+  const ABS_II_DRIVE = [[60, 0.408], [65, 0.425], [70, 0.4375],
+                        [75, 0.45], [85, 0.475], [95, 0.48]];
+  const ABS_II_LIFT_KNEE = 40.0;
+  const ABS_II_LIFT_MAX = 60.0;
+  const ABS_II_COP_AT_MAX_LIFT = 0.30;
+
+  function lerpPairs(pairs, x) {
+    if (!pairs || !pairs.length) return null;
+    if (x <= pairs[0][0]) return pairs[0][1];
+    if (x >= pairs[pairs.length - 1][0]) return pairs[pairs.length - 1][1];
+    for (let i = 0; i < pairs.length - 1; i++) {
+      if (x >= pairs[i][0] && x <= pairs[i + 1][0]) {
+        const f = (x - pairs[i][0]) / ((pairs[i + 1][0] - pairs[i][0]) || 1);
+        return pairs[i][1] + (pairs[i + 1][1] - pairs[i][1]) * f;
+      }
+    }
+    return pairs[pairs.length - 1][1];
+  }
+
+  /* tDriveC：驱动热源温度℃；tDemandC：要送到的温度（蒸汽/热水）℃ */
+  function absIICop(tDriveC, tDemandC) {
+    const td = Number(tDriveC), tD = Number(tDemandC);
+    if (!(td > 0) || !(tD > 0)) return COP_II_ABS_SELF;
+    const drive = lerpPairs(ABS_II_DRIVE, td);
+    const lift = tD - td;
+    let cop = drive;
+    if (lift > ABS_II_LIFT_KNEE) {
+      const f = Math.min((lift - ABS_II_LIFT_KNEE) /
+                         (ABS_II_LIFT_MAX - ABS_II_LIFT_KNEE), 1.0);
+      cop = drive - (drive - ABS_II_COP_AT_MAX_LIFT) * f;
+    }
+    return clamp(cop, 0.28, 0.50);
   }
 
   function stage1(scene) {
@@ -558,7 +837,9 @@ window.WHENG = (function () {
       setk("abs_self", t >= 90 && absLift > 5 && absLift <= 60,
         (t >= 90 && absLift > 5 && absLift <= 60)
           ? ("二类升温型：热源 " + t + "℃ → 蒸汽 " + tSteamNeed +
-             "℃，温升 " + absLift.toFixed(0) + " K（" + (absLift <= 40 ? "单级档 COP≈0.45" : "两级档 COP≈0.30") + "）")
+             "℃，温升 " + absLift.toFixed(0) + " K、COP≈" +
+             absIICop(t, tSteamNeed).toFixed(3) +
+             "（连续曲线：驱动温度与温升都进入计算，见边界页）")
           : (t < 90 ? ("吸收式自驱动需 ≥90℃ 驱动热源（当前 " + t + "℃）")
              : (absLift <= 5 ? ("热源已高于蒸汽需求温度，应直接产汽（whb_steam），无需升温型热泵")
                 : ("温升 " + absLift.toFixed(0) + " K 超过 60 K，超出单/两级吸收式标定范围"))));
@@ -706,11 +987,64 @@ window.WHENG = (function () {
     return curve[curve.length - 1][1];
   }
 
+  /* ---------- 系统寄生损失修正（工质泵 + 管路压降，2026-09-28 P1-1）----------
+     效率表算的是"理想循环净输出"（泵等熵效率 0.80、忽略管道压损）。
+     这一层把真实机组多付的两笔扣掉，得到**交付净效率**：
+       ① 泵总效率（等熵×电机）远低于 0.80，小机组尤其低；
+       ② 管路/换热器/阀门压降要额外加压升。
+     公式、实测锚点与诚实性边界见 src/engine/parasitic.js 头部说明；
+     量级：10 kW 级 ORC 扣 0.6~1.1 个百分点、5 MW 级扣 0.1~0.2 个百分点。 */
+  function netEffPct(path, tSrc, qKw) {
+    const P = window.WHPARASITIC;
+    let e0 = null, tDesign = null, kind = null;
+    if (path === "orc") {
+      e0 = orcEffPct(tSrc, 0); kind = "orc";
+      tDesign = clamp(Number(tSrc) - ORC_COOLDOWN_K, 60, 360);
+    } else if (path === "steam_pp") {
+      e0 = steamEffPct(tSrc); kind = "steam";
+      tDesign = clamp(Number(tSrc) - 100.0, 180.0, 540.0);
+    } else return null;
+    if (e0 === null || e0 === undefined) return null;
+    if (!P || !P.hasTable(kind)) return e0;
+    const cap0 = Math.max(Number(qKw) * e0 / 100.0, 1e-6);
+    const loss = P.lossPct(kind, tDesign, cap0);
+    return e0 - loss;
+  }
+  /* 修正量本身（百分点），供界面/文档展示 */
+  function parasiticPct(path, tSrc, qKw) {
+    const raw = path === "orc" ? orcEffPct(tSrc, 0) : steamEffPct(tSrc);
+    const net = netEffPct(path, tSrc, qKw);
+    if (raw === null || net === null) return null;
+    return raw - net;
+  }
+
   // ---------- 减排/成本 ----------
   function heatRedGas(scene, penalty) {
     const q = recoveredHeatKw(scene);
     const heatGj = q * Number(scene["年运行小时"]) * 3.6 / 1000.0;
     return heatGj * GAS_EF / BOILER_EFF / (penalty || 1.0);
+  }
+
+  /* 储热类的减排量：随收益口径切换（2026-09-28 P1-4）。
+     口径 A（售热/替代燃料）：与直接换热同口径 = 回收热替代天然气锅炉；
+     口径 B（峰谷套利）：替代的是**峰段电加热**，减排按电网因子算
+        （少买的电量 = 放热量 ÷ 电加热效率）；叠加口径按 A 计（保守）。
+     年吞吐量同样按峰段等效放电小时计，避免用 6,000 h 把减排量放大 4 倍。 */
+  function storageReduction(scene) {
+    const sh = storageHoursOf(Number(scene["年运行小时"]));
+    const eff = 0.75;                                   // 相变储放热效率（与能效列一致）
+    /* 充热耗电的排放：谷电充热时要从替代量里扣掉（否则等于说"用电充热却不排碳"）。
+       余热直接充热（storageCharge = waste）时充热侧不计排放。 */
+    const chargeCo2 = storageChargeMode() === "valley"
+      ? (1.0 / eff) * sh * 1000.0 * GRID_EF / 1000.0 : 0.0;
+    if (storageRevenueMode() === "arbitrage") {
+      const mwhEl = sh * 1000.0 / ELEC_HEAT_ETA / 1000.0;   // MWh 电
+      const avoided = mwhEl * GRID_EF;
+      return Math.max(avoided - chargeCo2, 0.0);
+    }
+    const q = recoveredHeatKw(scene);
+    const heatGj = q * sh * 3.6 / 1000.0;
+    return Math.max(heatGj * GAS_EF / BOILER_EFF - chargeCo2, 0.0);
   }
 
   function steamDrivenAbsReduction(scene) {
@@ -746,8 +1080,9 @@ window.WHENG = (function () {
     const q = qForPath(path, scene, recoveredHeatKw(scene));
     const hours = Number(scene["年运行小时"]);
     let e = null;
-    if (path === "orc") e = orcEffPct(Number(scene["热源温度_degC"]), Number(scene["换热端差_degC"]));
-    else if (path === "steam_pp") e = steamEffPct(Number(scene["热源温度_degC"]));
+    if (path === "orc" || path === "steam_pp") {
+      e = netEffPct(path, Number(scene["热源温度_degC"]), q);
+    }
     else if (path === "teg") e = BASE_INDICATORS.teg[0];  // TEG 能效列（5%）
     else return 0.0;
     if (!e) return 0.0;
@@ -768,13 +1103,18 @@ window.WHENG = (function () {
 
       // ---- 第 1 步：先定能效（装机容量要用它，所以顺序不能颠倒）----
       if (p === "orc") {
-        const e = orcEffPct(Number(scene["热源温度_degC"]), Number(scene["换热端差_degC"]));
-        if (e) X[i][0] = pyRound(e, 2);
+        /* 2026-09-28：能效列改用**交付净效率**（已扣泵功与管路压降的系统寄生损失），
+           这样装机容量、发年电量、减排量与回收期全部是"到用户手上的净输出"口径 */
+        const e = netEffPct("orc", Number(scene["热源温度_degC"]), orcRecoveredKw(scene));
+        if (e !== null && e !== undefined) X[i][0] = pyRound(e, 2);
       } else if (p === "steam_pp") {
-        const e = steamEffPct(Number(scene["热源温度_degC"]));
-        if (e) X[i][0] = pyRound(e, 2);
+        const e = netEffPct("steam_pp", Number(scene["热源温度_degC"]), steamRecoveredKw(scene));
+        if (e !== null && e !== undefined) X[i][0] = pyRound(e, 2);
       } else if (p === "abs_self") {
-        const cop = demand === "工艺蒸汽" ? COP_II_ABS_SELF : COP_I_ABS_SELF;
+        /* 二类（升温型）用连续曲线：COP 随驱动温度与温升变化（2026-09-28 P1-3） */
+        const cop = demand === "工艺蒸汽"
+          ? absIICop(Number(scene["热源温度_degC"]), compSupplyTemp(scene))
+          : COP_I_ABS_SELF;
         X[i][0] = pyRound(cop * 100.0, 2);
       } else if (p === "abs_ext") {
         X[i][0] = pyRound(COP_H_ABS_EXT * 100.0, 2);
@@ -804,12 +1144,13 @@ window.WHENG = (function () {
       // 无出处的路径保留工程估算/示意值，但那个值只用于展示，不参与排序。
       if (ECON_GRADE[p] === "sourced") {
         const pb = paybackYears(p, X[i][1], hours, compCop);
-        if (pb !== null) X[i][2] = pyRound(pb, 2);
+        X[i][2] = (pb === null) ? NO_PAYBACK_YEARS : pyRound(pb, 2);
       }
 
       // ---- 第 3 步：减排与运行成本的动态覆盖（公式与原实现一致）----
       if (p === "abs_self") {
-        const redFactor = demand === "工艺蒸汽" ? COP_II_ABS_SELF : 1.0;
+        const redFactor = demand === "工艺蒸汽"
+          ? absIICop(Number(scene["热源温度_degC"]), compSupplyTemp(scene)) : 1.0;
         X[i][3] = pyRound(heatRedGas(scene) * redFactor, 1);
       } else if (p === "abs_ext") {
         X[i][3] = pyRound(steamDrivenAbsReduction(scene), 1);
@@ -829,7 +1170,7 @@ window.WHENG = (function () {
            注意：本分支在下面的减排分支之前，必须同时补上减排列，
            否则 else-if 链会让储热路径的减碳留在基准值 0（曾犯此错）。 */
         X[i][5] = pyRound(energyCostWanMw(p, hours), 1);
-        X[i][3] = pyRound(heatRedGas(scene), 1);
+        X[i][3] = pyRound(storageReduction(scene), 1);
       } else if (["direct", "whb_steam", "tc_storage", "pcm_storage"].indexOf(p) >= 0) {
         X[i][3] = pyRound(heatRedGas(scene), 1);
       }
@@ -1028,24 +1369,33 @@ window.WHENG = (function () {
 
   // 展示用细账（ORC/蒸汽朗肯 P10/P50/P90 与净功率/收益）
   function orcDetail(tSrc, mDot, medium, hours, dT) {
-    const c = clamp(tSrc - dT, 100, 360);
+    /* 查表温度 2026-09-28 与 orcEffPct 统一为**设计蒸发温度**（热源−50 K）。
+       以前这里用 热源−端差，和矩阵里的 orcEffPct 不是同一个温度，属遗留不一致。 */
+    const c = clamp(tSrc - ORC_COOLDOWN_K, 60, 360);
     const row = pctLookupRow(TABLES.orcPct, c);
     if (!row) return null;
-    const q = recoveredHeatKw({ "热源温度_degC": tSrc, "载体": medium, "流量_kg_s": mDot, "换热端差_degC": dT });
-    const p50 = row[2];
+    // 回收热按该路径自己的降温程算（与矩阵 qForPath 同口径）
+    const q = orcRecoveredKw({ "热源温度_degC": tSrc, "载体": medium, "流量_kg_s": mDot, "换热端差_degC": dT });
+    const p50Table = row[2];
+    const p50 = p50Table - (parasiticPct("orc", tSrc, q * p50Table / 1000.0) || 0.0);
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
-    return { q, p10: row[1], p50, p90: row[3], n: row[4], net, mwh, co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
+    return { q, p10: row[1], p50, p90: row[3], n: row[4], net, mwh,
+             p50Table, parasitic: p50Table - p50,
+             co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
   }
 
   function steamDetail(tSrc, mDot, medium, hours, dT) {
     const tb = clamp(tSrc - 100.0, 180.0, 540.0);
     const row = TABLES.stPct ? pctLookupRow(TABLES.stPct, tb) : null;
-    const q = recoveredHeatKw({ "热源温度_degC": tSrc, "载体": medium, "流量_kg_s": mDot, "换热端差_degC": dT });
-    const p50 = steamEffPct(tSrc) * 10.0;
+    const q = steamRecoveredKw({ "热源温度_degC": tSrc, "载体": medium, "流量_kg_s": mDot, "换热端差_degC": dT });
+    const p50Table = steamEffPct(tSrc) * 10.0;
+    const p50 = p50Table - (parasiticPct("steam_pp", tSrc, q * p50Table / 10000.0) || 0.0);
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
-    return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null, n: row ? row[4] : null, net, mwh, co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
+    return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null,
+             n: row ? row[4] : null, net, mwh, p50Table, parasitic: p50Table - p50,
+             co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
   }
 
   function heatDetail(mDot, medium, tSrc, hours, dT, cop) {
@@ -1064,11 +1414,16 @@ window.WHENG = (function () {
   return {
     PATH_KEYS, DISPLAY, INDICATORS, DIRECTIONS, CP, BASE_INDICATORS,
     ABS_COOL_T_MIN, COP_C_ABS, COP_E_COOL, GRID_EF, ELEC_PRICE, HP_COP,
+    COP_I_ABS_SELF, COP_II_ABS_SELF, COP_H_ABS_EXT,
     setPrices, elecPrice, heatingHoursCap, heatPrice, HEATING_SEASON_HOURS, GAS_PRICE,
+    valleyElec, peakValley, storageRevenueMode, storageChargeMode, storageHoursOf,
+    storageReduction, ELEC_HEAT_ETA, NO_PAYBACK_YEARS,
     HP_ETA_CARNOT, HP_APPROACH_K, compCopFor, compSupplyTemp,
+    hpCopEnvelope, HP_COP_ENVELOPE, absIICop, ABS_II_DRIVE,
     setTables, validateScene, recoveredHeatKw, scaleBand, scaleMultiplier,
     absCoolCop, stage1, buildMatrixV2, entropyWeights, combinedWeights,
     topsis, runDecision, boundaryNotices, orcEffPct, steamEffPct,
+    netEffPct, parasiticPct,
     orcDetail, steamDetail, heatDetail, pctLookupRow
     , orcRecoveredKw, steamRecoveredKw, qForPath, orcEvapTemp
     , ORC_COOLDOWN_K, STEAM_EXHAUST_FLOOR_C, HEAT_MIN_COOLDOWN_K, heatFloor
@@ -1485,9 +1840,32 @@ let state = {
      其余为 null → 引擎按 60℃(供热)/100℃(干燥) 默认值处理。 */
   tDem: null,
   /* 可调计价与季节参数（2026-09-27 做成界面参数）：
-     电价 0.65 元/kWh = 自发自用替代购电；余电上网可调到 0.42 左右。
+     电价默认 0.68 元/kWh = 9 省官方代理购电到户价的中位（自发自用替代购电口径）；
+     余电上网口径按燃煤基准价中值取 0.42 左右。
      供暖季等效小时默认 3,200 h（仅「供暖·热水」需求生效）。 */
-  price: 0.65, heatHours: 3200, gas: 98
+  price: 0.68, heatHours: 3200, gas: 98,
+  /* 2026-09-28 新增：峰谷价差（储热套利口径）、储热收益口径、峰段等效放电小时 */
+  pv: 0.95, storageMode: "heat", storageCharge: "waste",
+  storageHours: 1500, region: "custom"
+};
+
+/* 地区预置（P1-5）：值全部来自外部检索到的官方公开价——
+   price＝分省代理购电到户电价（两部制 1-10kV 平段，含购电+线损+输配+系统运行+基金附加）；
+   pv＝分时电价峰谷价差。缺项用 null，选中时该滑块保持不动（不猜数）。 */
+const REGION_PRESETS = {
+  "median": { price: 0.6844, pv: 0.95, label: "9 省到户价中位 + 11 省峰谷价差中位" },
+  "山东":   { price: 0.71,   pv: 0.95, label: "山东 35kV 平段 0.71；峰谷价差 0.95" },
+  "浙江":   { price: 0.6101, pv: 1.35, label: "浙江 平段 0.6101；峰谷价差 1.35" },
+  "江苏":   { price: 0.6756, pv: 0.92, label: "江苏 平段 0.6756；峰谷价差 0.92" },
+  "上海":   { price: 0.6407, pv: 1.65, label: "上海 平段 0.6407；峰谷价差 1.65" },
+  "广东珠三角": { price: 0.7068, pv: 1.35, label: "广东珠三角 0.7068；峰谷价差 1.35" },
+  "四川":   { price: 0.6864, pv: 0.81, label: "四川 平段 0.6864；峰谷价差 0.81" },
+  "河南":   { price: 0.6943, pv: 0.75, label: "河南 平段 0.6943；峰谷价差 0.75" },
+  "湖北":   { price: 0.6273, pv: null, label: "湖北 平段 0.6273（该轮未检索峰值价差）" },
+  "安徽":   { price: 0.6844, pv: null, label: "安徽 0.6844（该轮未检索峰谷价差）" },
+  "湖南":   { price: null,   pv: 1.61, label: "湖南 峰谷价差 1.61（该轮未检索到户价）" },
+  "北京":   { price: null,   pv: 0.54, label: "北京 峰谷价差 0.54（该轮未检索到户价）" },
+  "福建":   { price: null,   pv: 0.52, label: "福建 峰谷价差 0.52（该轮未检索到户价）" }
 };
 
 function readInputs() {
@@ -1498,14 +1876,37 @@ function readInputs() {
   if ($("in-price")) state.price = +$("in-price").value;
   if ($("in-heat-h")) state.heatHours = +$("in-heat-h").value;
   if ($("in-gas")) state.gas = +$("in-gas").value;
-  /* 把两个口径参数交给引擎（引擎内部所有电价与供暖小时都读它） */
-  eng.setPrices({ elec: state.price, heatingHours: state.heatHours, heatPrice: state.gas });
+  if ($("in-pv")) state.pv = +$("in-pv").value;
+  if ($("storage-mode")) state.storageMode = $("storage-mode").value;
+  if ($("storage-charge")) state.storageCharge = $("storage-charge").value;
+  if ($("in-sh")) state.storageHours = +$("in-sh").value;
+  if ($("region")) state.region = $("region").value;
+  /* 把口径参数交给引擎（引擎内部所有电价、热价、供暖小时与储热口径都读它） */
+  eng.setPrices({ elec: state.price, heatingHours: state.heatHours, heatPrice: state.gas,
+                  peakValley: state.pv, storageMode: state.storageMode,
+                  storageCharge: state.storageCharge,
+                  storageHours: state.storageHours });
   $("v-t").textContent = state.t + " ℃"; $("v-f").textContent = state.f + " kg/s";
   $("v-dt").textContent = state.dT + " ℃"; $("v-h").textContent = state.hours + " h";
   $("v-lam").textContent = state.lam.toFixed(2);
   if ($("v-price")) $("v-price").textContent = state.price.toFixed(2) + " 元/kWh";
   if ($("v-heat-h")) $("v-heat-h").textContent = state.heatHours + " h";
   if ($("v-gas")) $("v-gas").textContent = state.gas + " 元/GJ";
+  if ($("v-pv")) $("v-pv").textContent = state.pv.toFixed(2) + " 元/kWh";
+  if ($("v-sh")) $("v-sh").textContent = state.storageHours + " h";
+}
+
+/* 地区预置：选中后把该省的官方公开价写进滑块，再重算。
+   缺项（检索没拿到）保持原值不动 —— 不猜数。 */
+function applyRegion(name) {
+  const p = REGION_PRESETS[name];
+  if (!p || !$("in-price")) return;
+  if (p.price !== null && p.price !== undefined) { $("in-price").value = p.price; }
+  if (p.pv !== null && p.pv !== undefined) { $("in-pv").value = p.pv; }
+  readInputs();
+  $("calc-note").textContent = "已应用地区预置：" + p.label +
+    "（滑杆仍可手动微调；缺项保持原值不变）";
+  calc();
 }
 
 function buildScene(t, f, medium, dT, hours, demand, cont, drv, tDem) {
@@ -1551,6 +1952,11 @@ function renderTopsis(res) {
     return (
     `<tr class="${i === 0 ? "best" : ""}"><td>${i + 1}</td><td>${eng.DISPLAY[o.path]}</td>` +
     o.row.map((v, j) => {
+      /* 回收期 99 年 = 占位值：该路径的年收益覆盖不了运行成本（公式现算 net ≤ 0），
+         典型例子是"谷电充热 + 售热"的储热组合。显示成"—"，不要假装有个回收期。 */
+      if (j === 2 && v >= 99) {
+        return '<td title="年产出价值不足以覆盖能耗与运维，公式现算无解（净收益 ≤ 0）">—</td>';
+      }
       if (j === 3) return `<td>${v > 0 ? num(v, 1) : "—"}</td>`;
       if (j === 1 || j === 2) {
         return `<td>${num(v, 2)}${pending
@@ -1622,8 +2028,9 @@ function renderTop(res) {
   if (top === "orc") {
     const d = eng.orcDetail(t, f, medCore, hours, dT);
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
-    sub = `ORC 净功率 P50 ${num(d.p50, 1)} kW/MW热（P10 ${num(d.p10, 1)}~P90 ${num(d.p90, 1)}，${num(d.n, 0)} 工况）· 实际回收 ${num(d.q, 0)} kW` +
-      ` · 口径：按蒸发器出口温度档的**中位设计**；帕累托**最优设计**点可达 150.5 kW/MW热（15.1%），` +
+    sub = `ORC **交付净功率** P50 ${num(d.p50, 1)} kW/MW热（表值 ${num(d.p50Table, 1)} − 系统寄生损失 ${num(d.parasitic, 2)} 个百分点：` +
+      `泵功＋管路压降）· 实际回收 ${num(d.q, 0)} kW` +
+      ` · 口径：按蒸发器出口温度档的中位设计；帕累托理想设计点可达 150.5 kW/MW热（15.1%），` +
       `申报书 11.0~15.1% 指的是后者`;
   } else if (top === "steam_pp") {
     const d = eng.steamDetail(t, f, medCore, hours, dT);
@@ -1649,7 +2056,9 @@ function renderTop(res) {
     const q = eng.recoveredHeatKw(currentScene());
     const qCold = cop * q;
     const avoidedMwh = qCold / eng.COP_E_COOL * hours / 1000;
-    co2 = avoidedMwh * eng.GRID_EF; money = avoidedMwh * 1000 * eng.ELEC_PRICE / 10000;
+    /* 2026-09-28 修：这里原来用写死的 ELEC_PRICE(0.65)，不随界面电价滑块变化；
+       改用引擎的当前电价。 */
+    co2 = avoidedMwh * eng.GRID_EF; money = avoidedMwh * 1000 * eng.elecPrice() / 10000;
     s1v = num(q, 0); s2k = "服务冷量"; s2v = num(qCold, 0); s2u = "kW 冷";
     sub = `吸收式制冷 COP_c=${cop}（${t >= 85 ? "≥85℃ 0.7" : "80~84℃ 0.6"}）· 替代电压缩电耗 COP_e=${eng.COP_E_COOL}`;
     icon = "❄";
@@ -1661,13 +2070,25 @@ function renderTop(res) {
     const d = eng.heatDetail(f, medCore, t, hours, dT, null);
     s1v = num(d.q, 0); s2v = num(d.heatGj / 3.6, 0); s2u = "MWh 热/年"; co2 = d.co2; money = d.money;
     if (top === "abs_self") {
-      const cop = isSteamNeed ? 0.45 : 1.7;
-      sub = `吸收式热泵 COP_h=${cop}（${isSteamNeed ? "二类制蒸汽 0.45" : "一类增热 1.7"}）· 替代天然气口径`;
+      const cop = isSteamNeed
+        ? eng.absIICop(t, state.tDem || 152) : eng.COP_I_ABS_SELF;
+      sub = `吸收式热泵 COP_h=${num(cop, 3)}（${isSteamNeed
+          ? "二类升温型：随驱动温度与温升连续变化" : "一类增热 1.7"}）· 替代天然气口径`;
     } else if (top === "abs_ext") {
       sub = "外购蒸汽驱动吸收式（哈石化余热暖民同型，COP_h≈1.7）· 已扣驱动蒸汽燃料";
     } else if (top === "direct") sub = "直接换热 · 替代天然气锅炉口径（0.0561 tCO₂/GJ ÷ 90%）";
     else if (top === "whb_steam") sub = "余热锅炉直接产汽 · 替代天然气锅炉口径";
-    else sub = "储热路径 · 时空解耦（热量按替代天然气口径）";
+    else if (top === "pcm_storage" || top === "tc_storage") {
+      const mode = eng.storageRevenueMode();
+      const sh = eng.storageHoursOf(hours);
+      const modeText = { heat: "售热/替代燃料（按热价）",
+        arbitrage: "峰谷套利（替代峰段电加热）",
+        stack: "售热＋套利叠加（需两个基准同时成立）",
+        off: "不计收益（仅技术展示）" }[mode] || mode;
+      sub = `储热路径 · 时空解耦 · 收益口径：${modeText} · ` +
+        `年等效满功率放电 ${num(sh, 0)} h（峰段口径，不沿用余热可用小时）`;
+    }
+    else sub = "储热路径 · 时空解耦";
   }
   $("r-name").textContent = eng.DISPLAY[top];
   $("r-sub").textContent = sub;
@@ -1957,7 +2378,9 @@ function renderRtFrame(f) {
       top === "comp" ? (eng.compCopFor(currentScene()) || {}).cop || null : null);
     $("rt-out").textContent = num(dd.heatGj / 3.6, 0); $("rt-out-u").textContent = "MWh 热/年";
     $("rt-co2").textContent = num(dd.co2, 1);
-    $("rt-sub").textContent = top === "comp" ? "热泵提温 COP 2.8（扣耗电）" : "替代天然气口径";
+    $("rt-sub").textContent = top === "comp"
+      ? ("热泵提温 COP " + num((eng.compCopFor(v.scene) || {}).cop, 2) + "（按温度计算，已扣耗电）")
+      : "替代天然气口径";
   }
   const notes = eng.boundaryNotices(res);
   $("rt-warn").textContent = notes.length ? "见下方提示" : (res.out_of_scope ? "越界" : "无");
@@ -2154,11 +2577,20 @@ $("btn").addEventListener("click", calc);
 $("preset").addEventListener("change", fillPreset);
 $("cond-search").addEventListener("input", () => drawConds($("cond-search").value));
 [$("in-t"), $("in-f"), $("in-dt"), $("in-h"), $("in-lam"), $("medium"), $("demand"),
- $("in-price"), $("in-heat-h"), $("in-gas")].forEach((el) => {
+ $("in-price"), $("in-heat-h"), $("in-gas"), $("in-pv"), $("in-sh")].forEach((el) => {
   if (!el) return;
   el.addEventListener("input", readInputs);
   el.addEventListener("change", calc);
 });
+if ($("storage-mode")) {
+  $("storage-mode").addEventListener("change", () => { readInputs(); calc(); });
+}
+if ($("storage-charge")) {
+  $("storage-charge").addEventListener("change", () => { readInputs(); calc(); });
+}
+if ($("region")) {
+  $("region").addEventListener("change", () => applyRegion($("region").value));
+}
 
 $("io-kind").addEventListener("change", () => { ioDisconnect(); ioRenderCfg(); });
 $("io-connect").addEventListener("click", ioConnect);
