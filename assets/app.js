@@ -1780,13 +1780,17 @@ window.WHENG = (function () {
     if (!d) return null;
     const c = d.tEvapC === null ? null : d.tEvapC;
     const row = pctLookupRow(TABLES.orcPct, c);
-    const p50 = d.effPct;
+    /* 单位口径（2026-09-28 修）：p50 / p50Table 一律用"kW 净输出 / MW 回收热"，
+       parasitic 用"百分点"（= 表值% − 交付%）。此前 p50 换成 %、p50Table 仍是 kW/MW，
+       界面把 84 与 8.2 相减显示成"寄生损失 75.8 个百分点"。 */
+    const p50 = d.effPct * 10.0;
     const p50Table = row ? row[2] : p50;
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
     return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null,
              n: row ? row[4] : null, net, mwh,
-             p50Table: p50Table, parasitic: p50Table - p50, design: d.design,
+             p50Table: p50Table, parasitic: (p50Table - p50) / 10.0,
+             effPct: d.effPct, design: d.design,
              designNote: d.note, spanK: d.spanK, tCondC: d.tCondC,
              co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
   }
@@ -2492,8 +2496,8 @@ function renderTop(res) {
     const d = eng.orcDetail(t, f, medCore, hours, dT);
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
     sub = `ORC **交付净功率** P50 ${num(d.p50, 1)} kW/MW热（设计：${d.designNote || "单压"}；` +
-      `表值 ${num(d.p50Table, 1)} ${d.design === "two-stage" ? "（两级表已含泵功与厂用电）" :
-        "− 系统寄生损失 " + num(d.parasitic, 2) + " 个百分点：泵功＋管路压降"}）· 实际回收 ${num(d.q, 0)} kW` +
+      `表值 ${num(d.p50Table, 1)} kW/MW热 ${d.design === "two-stage" ? "（两级表已含泵功与厂用电）" :
+        "− 系统寄生损失 " + num(d.parasitic, 2) + " 个百分点 = 交付 " + num(d.effPct, 2) + "%"}）· 实际回收 ${num(d.q, 0)} kW` +
       ` · 口径：按蒸发器出口温度档的中位设计；帕累托理想设计点可达 150.5 kW/MW热（15.1%），` +
       `申报书 11.0~15.1% 指的是后者`;
     /* 设计点对照（P2-9）：当前设计 vs 功率最优设计点 */
