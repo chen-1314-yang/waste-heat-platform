@@ -405,13 +405,19 @@ window.WHENG = (function () {
   const CHILLER_ETA_CARNOT = 0.41;
   const CHILLER_EVAP_C = 7.0;
   const CHILLER_APPROACH_K = 5.0;
+  /* 电制冷的**部分负荷折减**（2026-09-29，A4，第七轮 R4-C1/C2）：
+     实测：某 1753 kW 离心机满负荷 COP 6.0~6.5，约 57% 负荷时 4.8~5.2（≈0.80 倍），
+     约 28% 负荷时 3.5~4.0（≈0.60 倍）；另一台螺杆机负荷从 100% 降到 63% 时 COP 下降 >35%。
+     我们的场景没有负荷率输入，故按"常年平均负荷率约 60~70%"取折减系数 **0.85**（可调）。
+     这一步会让"电制冷基准"更贴近真实，从而让吸收式制冷的相对优势回到合理量级。 */
+  const CHILLER_PART_LOAD = 0.85;
   function electricChillerCop(scene) {
     const tAmb = Number(ambientC());
     const tCond = (scene && Number(scene["环境温度_degC"])) ? Number(scene["环境温度_degC"]) + CHILLER_APPROACH_K
       : tAmb + CHILLER_APPROACH_K;
     const te = CHILLER_EVAP_C + 273.15, tc = tCond + 273.15;
     if (!(tc > te + 1.0)) return COP_E_COOL;
-    return clamp(CHILLER_ETA_CARNOT * te / (tc - te), 3.0, 6.5);
+    return clamp(CHILLER_ETA_CARNOT * te / (tc - te), 3.0, 6.5) * CHILLER_PART_LOAD;
   }
   /* 当前场景下的电制冷 COP（由 buildMatrixV2 每轮设置，供各公式读取） */
   let CHILLER_COP = COP_E_COOL;
@@ -1264,6 +1270,23 @@ window.WHENG = (function () {
     }
     return curve[curve.length - 1][1];
   }
+  /* 蒸汽侧效率区间（2026-09-29，A1，第七轮 R3）：
+     我们蒸汽表隐含的等效等熵效率是 0.7891（二分反解），而第七轮实测：
+       · 印尼 Bintan 33 MW 凝汽机 **64.22%**、30 MW 背压机 61.70%（DCS 高频实测）
+       · 水泥窑余热汽轮机设计绝对内效率 75~85%（CDM 取 80%）
+       · 330 MW 亚临界机组现场试验缸效率 80.4~88.5%
+       · 高背压 CHP 全工况 83.5~93.6%
+     口径不完全统一（等熵效率 / 相对内效率 / 绝对内效率），所以**先不动点值**、
+     而是给出区间：下沿按小机实测比值 0.63/0.7891、上沿按 0.88/0.7891。 */
+  const STEAM_ETA_LOW = 0.63;
+  const STEAM_ETA_HIGH = 0.88;
+  const STEAM_ETA_REF = 0.7891;
+  function steamEffRangePct(tSrc) {
+    const e = steamEffPct(tSrc);
+    if (e === null || e === undefined) return null;
+    return { mid: e, low: e * (STEAM_ETA_LOW / STEAM_ETA_REF),
+             high: e * (STEAM_ETA_HIGH / STEAM_ETA_REF), refEtaT: STEAM_ETA_REF };
+  }
 
   /* ---------- 系统寄生损失修正（工质泵 + 管路压降，2026-09-28 P1-1）----------
      效率表算的是"理想循环净输出"（泵等熵效率 0.80、忽略管道压损）。
@@ -1434,8 +1457,10 @@ window.WHENG = (function () {
       if (e2 !== null) {
         const cap0 = Math.max(Number(qKw) * e2 / 100.0, 1e-6);
         const f = Math.min(1.0, turbineEtaOf(cap0) / ORC2_REF_ETA_T);
-        return { effPct: e2 * f * scale, design: "two-stage", spanK: span, tCondC: tCond,
+        const g = generatorEta(cap0);
+        return { effPct: e2 * f * g * scale, design: "two-stage", spanK: span, tCondC: tCond,
                  tEvapC: null, sizeFactor: f, parasitic: 0.0,
+                 generatorEta: g,
                  note: "两级/串级（R245fa，实测标定）" };
       }
     }
@@ -1447,12 +1472,13 @@ window.WHENG = (function () {
         const e0 = p50 / 10.0;                       // kW/MW → %
         const cap0 = Math.max(Number(qKw) * e0 / 100.0, 1e-6);
         const f = Math.min(1.0, turbineEtaOf(cap0) / ORC2_REF_ETA_T);
+        const g = generatorEta(cap0);
         const P = window.WHPARASITIC;
         const loss = (P && P.hasTable("orc"))
           ? P.lossPct("orc", clamp(tEvap, 60, 360), cap0) : 0.0;
-        return { effPct: (e0 * f - loss) * scale, design: "cond-aware",
+        return { effPct: (e0 * f * g - loss) * scale, design: "cond-aware",
                  spanK: span, tCondC: tCond, tEvapC: tEvap,
-                 sizeFactor: f, parasitic: loss,
+                 sizeFactor: f, parasitic: loss, generatorEta: g,
                  note: "单压（按真实冷源 " + tCond.toFixed(0) + "℃ 查二维表）" };
       }
     }
@@ -1460,10 +1486,11 @@ window.WHENG = (function () {
     if (eff === null) return null;
     const cap0 = Math.max(Number(qKw) * eff / 100.0, 1e-6);
     const f = turbineSizeFactor(cap0);
+    const g = generatorEta(cap0);
     const P = window.WHPARASITIC;
     const loss = (P && P.hasTable("orc")) ? P.lossPct("orc", clamp(tEvap, 60, 360), cap0) : 0.0;
-    return { effPct: (eff * f - loss) * scale, design: "single", spanK: span, tCondC: tCond,
-             tEvapC: tEvap, sizeFactor: f, parasitic: loss,
+    return { effPct: (eff * f * g - loss) * scale, design: "single", spanK: span, tCondC: tCond,
+             tEvapC: tEvap, sizeFactor: f, parasitic: loss, generatorEta: g,
              note: "单压（标定表 + 系统寄生损失）" };
   }
 
@@ -1482,6 +1509,31 @@ window.WHENG = (function () {
      → 1 kW 0.91、5 kW 0.94、20 kW 0.97、≥100 kW 1.00（不给大机组加成，
        因为 >100 kW 没有实验数据可依）。 */
   const ETA_T_REF = 0.7897;
+  /* ---- 发电机 + 机械效率（2026-09-29，A2）----
+
+     效率表给的是"透平轴功 − 泵功"，而真实交付的是**发电机端净电功率**，
+     中间还有发电机与机械损失。第七轮 R2-1 的 76 点实测给了直接证据：
+     **扭矩功 ÷ 焓降功中位 0.697**（0.3 kW 级小机组），即小机的发电机+机械损失吃掉约 30%。
+     MW 级发电机的效率一般在 0.95~0.97。
+
+     按规模插值（对数）：0.5 kW→0.70、5 kW→0.80、50 kW→0.88、200 kW→0.92、≥1 MW→0.95。
+     ⚠ 这一项**只作用于发电类路径**（ORC/蒸汽/储能发电），热泵与制冷另有各自的效率口径。 */
+  const GEN_ETA_CURVE = [[0.5, 0.70], [5.0, 0.80], [50.0, 0.88],
+                         [200.0, 0.92], [1000.0, 0.95]];
+  function generatorEta(capKw) {
+    const p = Math.max(Number(capKw) || 0, 0.1);
+    const c = GEN_ETA_CURVE;
+    if (p <= c[0][0]) return c[0][1];
+    if (p >= c[c.length - 1][0]) return c[c.length - 1][1];
+    for (let i = 0; i < c.length - 1; i++) {
+      if (p >= c[i][0] && p <= c[i + 1][0]) {
+        const f = (Math.log10(p) - Math.log10(c[i][0])) /
+                  (Math.log10(c[i + 1][0]) - Math.log10(c[i][0]));
+        return c[i][1] + (c[i + 1][1] - c[i][1]) * f;
+      }
+    }
+    return c[c.length - 1][1];
+  }
   function turbineEtaOf(capKw) {
     const M = window.WHTURBINE_SIZE;
     const p = Math.max(Number(capKw) || 0, 1e-3);
@@ -2102,6 +2154,7 @@ window.WHENG = (function () {
     orcEffRange, ETA_T_LOW, ETA_T_HIGH,
     orcCondP50, orcCondUsable,
     electricChillerCop, chillerCop, CHILLER_ETA_CARNOT,
+    generatorEta, GEN_ETA_CURVE, steamEffRangePct, CHILLER_PART_LOAD,
     tegEffPct, TEG_CURVE, transportKwhGjFor, dryingTransportKwhGj, DRYING_ELEC_SHARE,
     decisionCertificate, CERT_ASSUMPTIONS,
     orcDetail, steamDetail, heatDetail, pctLookupRow
