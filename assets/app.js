@@ -248,6 +248,12 @@ window.WHFLUIDS = (function () {
 */
 window.WHTURBINE_SIZE = { "meta": { "source": "Landelle Experimental ORC database（Zenodo 10.5281/zenodo.400556, CC BY 4.0）—项目内 38 台机组子集", "n": 38, "note": "分档中位为实测；>100 kW 无实验数据，按 100 kW 档保持（不外推）", "referenceEtaT": 0.7897, "rule": "只做保守修正：correction = min(1, η_t(size)/0.80)（不给大机组加成）", "fit": { "intercept": 0.7201, "slope": 0.0374 } }, "bands": [ [ 0.1, 1, 0.7, 12 ], [ 1, 5, 0.7645, 18 ], [ 5, 20, 0.71, 5 ], [ 20, 100, 0.685, 3 ] ] };
 
+/* 膨胀机部件图谱（实测）—— 由 tools/expander_map_build.py 生成，勿手改。
+   bands：[轴功率下限 kW, 上限 kW, 轴端等熵效率中位, 样本数]
+   口径：轴端 = 过程（P/T 反算）× 扭矩功/焓降功。详见 docs/口径字典.md
+*/
+window.WHEXPANDER = { "meta": { "unit": "轴功率 kW；效率为小数（0~1）", "columns_bands": [ "轴功率下限 kW", "上限 kW", "轴端等熵效率中位", "样本数" ], "definition": "轴端等熵效率 = 过程等熵效率 × (扭矩功/焓降功)", "source": "tools/expander_map_build.py（读 docs/2026-09-29-膨胀机特性_R245fa_1kW_76点.csv）", "caveat": "图谱只覆盖小机组（≤6 kW）实测；MW 级仍靠规模曲线 + 发电机效率" }, "bands": [ [ 0.0, 0.1, 0.2903, 4 ], [ 0.1, 0.25, 0.4999, 19 ], [ 0.25, 0.5, 0.5763, 28 ], [ 0.5, 1.5, 0.591, 26 ] ], "catalog": [ [ "R245fa 涡旋（1 kW 台架，77 点）", 0.35, "0.565（实测中位，轴端口径）", "Mendeley 10.17632/8ncck9946w（CC BY 4.0）" ], [ "R245fa 活塞（列日大学）", 2.8, "0.53（峰值，轴端口径）", "Frontiers in Energy Research 2020, 8:107" ], [ "硅氧烷 MM 叶片膨胀机", 0.8, "0.40~0.58（最大 η=0.58@800 W）", "ASME ORC 2015, Poster 136" ], [ "MDM(L3) 径流涡轮", 6.0, ">0.70（进口 265℃/7.9 bar）", "第八轮检索（LUT 台架）" ], [ "R123 涡旋（北工大，8 测点）", 2.65, "逐点表待录入（第八轮只有摘要）", "北工大低品位能源实验室 2017" ] ] };
+
 /* 两级/串级热水 ORC 效率表（R245fa）—— 由 tools/two_stage_table.py 生成，勿手改。
    每行：[热源进口℃, 源侧降温 K, 冷凝温度℃, 净效率%, 高温级蒸发℃, 低温级蒸发℃]
    净效率已含泵功与厂用电；标定与实测对照见 tools/two_stage_orc.py。
@@ -1547,6 +1553,30 @@ window.WHENG = (function () {
     }
     return c[c.length - 1][1];
   }
+  /* ---- 膨胀机部件图谱（A5，2026-09-29）----
+
+     图谱来自实测（R245fa 1 kW 台架 77 点 + 列日/MM/MDM 锚点），口径是**轴端等熵效率**，
+     按轴功率档给中位：0.05~0.1 kW→0.29、0.1~0.25→0.50、0.25~0.5→0.576、0.5~1.5→0.591。
+
+     怎么用（**避免与发电机效率重复扣减**）：
+       我们链路是「效率表(过程口径) × 规模系数 × 发电机效率 = 电输出」。
+       图谱给的是**轴端**口径，所以要反推成过程口径的上限：
+            过程等效上限 = 图谱轴端效率 ÷ 发电机效率
+       再除以参考 η_t（0.7897）得到"规模系数"的上限，取与规模曲线的**较保守者**。
+
+     诚实结论：对小机组段，图谱算出的上限**比现有规模曲线更宽松**（发电机效率已经把
+     机械损失算进去了）→ **实际不改数值**；它真正的价值是把"自由假设"换成实测数据，
+     并在极小型机组（<0.1 kW）处提供约束。 */
+  function expanderMapEta(pShaftKw) {
+    const M = window.WHEXPANDER;
+    if (!M || !M.bands || !M.bands.length) return null;
+    const p = Number(pShaftKw);
+    for (let i = 0; i < M.bands.length; i++) {
+      const b = M.bands[i];
+      if (p >= b[0] && p < b[1]) return b[2];
+    }
+    return null;          // 超出图谱覆盖（>1.5 kW）：不外推，交给规模曲线
+  }
   function turbineEtaOf(capKw) {
     const M = window.WHTURBINE_SIZE;
     const p = Math.max(Number(capKw) || 0, 1e-3);
@@ -1557,7 +1587,12 @@ window.WHENG = (function () {
     return ETA_T_REF;
   }
   function turbineSizeFactor(capKw) {
-    return Math.min(1.0, turbineEtaOf(capKw) / ETA_T_REF);
+    const curve = Math.min(1.0, turbineEtaOf(capKw) / ETA_T_REF);
+    const mapShaft = expanderMapEta(capKw);
+    if (mapShaft === null) return curve;
+    const procEquiv = mapShaft / generatorEta(capKw);   // 轴端 → 过程口径上限
+    const mapCap = Math.min(1.0, procEquiv / ETA_T_REF);
+    return Math.min(curve, mapCap);                     // 只做减法：取更保守的那个
   }
 
   function orcNetEffByEvap(tEvapC, qKw) {
@@ -2168,6 +2203,7 @@ window.WHENG = (function () {
     orcCondP50, orcCondUsable,
     electricChillerCop, chillerCop, CHILLER_ETA_CARNOT,
     generatorEta, GEN_ETA_CURVE, steamEffRangePct, CHILLER_PART_LOAD,
+    expanderMapEta,
     tegEffPct, TEG_CURVE, transportKwhGjFor, dryingTransportKwhGj, DRYING_ELEC_SHARE,
     decisionCertificate, CERT_ASSUMPTIONS,
     orcDetail, steamDetail, heatDetail, pctLookupRow
