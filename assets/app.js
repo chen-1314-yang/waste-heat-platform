@@ -2886,6 +2886,14 @@ function renderTop(res) {
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
     sub = `蒸汽朗肯净功率 ${num(d.p50, 1)} kW/MW热 · 实际回收 ${num(d.q, 0)} kW` +
       ` · 口径：锅炉出口温度点中位曲线（与内核 steam_eff_median_pct 同口径）`;
+    /* 蒸汽侧效率区间（A1，2026-09-29）：不擅自改点值，但把区间显示出来——
+       实测 30~33 MW 小机等熵效率 61.7~64.2%，水泥窑设计绝对内效率 75~85%，
+       330 MW 大机缸效率 80~88%，口径不统一，故只报区间。 */
+    const sr = eng.steamEffRangePct(t);
+    if (sr) {
+      sub += ` · 效率区间 ${num(sr.low, 2)}%~${num(sr.high, 2)}%（主口径 ${num(sr.mid, 2)}%；` +
+        `参考 η_t ${sr.refEtaT}，下沿按小机实测 0.63、上沿按大机 0.88）`;
+    }
   } else if (top === "teg") {
     const q = eng.recoveredHeatKw(currentScene());
     s1v = num(q, 0); co2 = 0; money = 0; s2v = "—";
