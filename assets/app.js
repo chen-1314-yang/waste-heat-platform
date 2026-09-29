@@ -254,6 +254,89 @@ window.WHTURBINE_SIZE = { "meta": { "source": "Landelle Experimental ORC databas
 */
 window.WHEXPANDER = { "meta": { "unit": "轴功率 kW；效率为小数（0~1）", "columns_bands": [ "轴功率下限 kW", "上限 kW", "轴端等熵效率中位", "样本数" ], "definition": "轴端等熵效率 = 过程等熵效率 × (扭矩功/焓降功)", "source": "tools/expander_map_build.py（读 docs/2026-09-29-膨胀机特性_R245fa_1kW_76点.csv）", "caveat": "图谱只覆盖小机组（≤6 kW）实测；MW 级仍靠规模曲线 + 发电机效率" }, "bands": [ [ 0.0, 0.1, 0.2903, 4 ], [ 0.1, 0.25, 0.4999, 19 ], [ 0.25, 0.5, 0.5763, 28 ], [ 0.5, 1.5, 0.591, 26 ] ], "catalog": [ [ "R245fa 涡旋（1 kW 台架，77 点）", 0.35, "0.565（实测中位，轴端口径）", "Mendeley 10.17632/8ncck9946w（CC BY 4.0）" ], [ "R245fa 活塞（列日大学）", 2.8, "0.53（峰值，轴端口径）", "Frontiers in Energy Research 2020, 8:107" ], [ "硅氧烷 MM 叶片膨胀机", 0.8, "0.40~0.58（最大 η=0.58@800 W）", "ASME ORC 2015, Poster 136" ], [ "MDM(L3) 径流涡轮", 6.0, ">0.70（进口 265℃/7.9 bar）", "第八轮检索（LUT 台架）" ], [ "R123 涡旋（北工大，8 测点）", 2.65, "逐点表待录入（第八轮只有摘要）", "北工大低品位能源实验室 2017" ] ] };
 
+/* 电制冷冷水机组的两组数据（2026-09-29 第二批·收口版）
+
+   本文件**不直接给 COP**，只给两样东西：
+     ① 形状参照：ASHRAE 205 Curve Set H 的 4×4 满负荷 COP 网格（**合成数据**）；
+     ② 实测锚点：3 台真机的实测 COP 与"冷凝温度敏感度"。
+
+   真正的 COP 由 `decision_core.js` 的 `electricChillerCop()` 按下面这条式子算：
+
+     COP(T_cond) = COP_REF × exp(−k × (T_cond − 30)) × 蒸发侧形状比 × 部分负荷 0.85
+     其中 蒸发侧形状比 = grid(冷冻水出水, T_cond) / grid(7, T_cond)
+
+   **为什么网格只用在"蒸发侧"**（这是本轮最重要的一条判断）：
+   把网格的冷凝方向斜率算出来是 ≈ **0.6 %/K**（如 7℃ 附近行：23.89℃→5.63、
+   35.00℃→5.23），而三份**实测**给的冷凝侧斜率是 **2.35~2.53 %/K**（见下）。
+   差了近 4 倍，加上网格最高一档 46.11℃ 还出现非单调（5.23→5.56），
+   说明这份合成数据在冷凝方向不可信。所以：**冷凝方向一律用实测斜率**，
+   网格只贡献"冷冻水出水温度→COP"的形状比（网格这个方向 ≈1.9 %/K，与实测相符）。
+
+   实测锚点（都可追溯，出处见 sources）：
+     A. 重庆通用机器厂 水冷离心机（额定制冷 1198 kW、主电机 261 kW）
+        冷却水进水 31.96℃、冷冻水出水 7.05℃ → **COP 4.59**（工厂变温工况试验）
+        → 归算到"30℃冷凝"：4.59 × exp(0.0246×(31.96−30)) = **4.80**  ← 常规离心机基准
+     B. 工研院 TAF 认证实验室 国产磁浮离心机 300RT（≈1056 kW）
+        冷冻水出水 7.06℃、冷却水进水 29.92℃ → **COP 6.45**（PT100±0.1℃、WT230 功率分析仪）
+        → 归算到"30℃冷凝"：**6.44**                              ← 高端变频机上限
+     C. 螺杆式 R22 水冷机组（GB/T 10870-2014 试验台，冷却水进水恒 30.1℃）
+        冷凝器出水 35.06 → 40.64℃，EER 4.56 → 3.96
+        → ln(4.56/3.96)/5.58 K = **2.53 %/K**                    ← 冷凝侧敏感性
+
+   机器等级带宽：常规离心 4.80 ↔ 高端磁浮 6.44（×1.34）。工业现场存量以常规离心/螺杆
+   为主，故**基准取常规机 4.80**；带宽写进"决策证书"的扰动项。
+
+   诚实性边界：三台机器都不是"我们测的"；重庆通用那三条点是变温工况试验的稳态记录，
+   只用于取基准点（不用于拟合斜率，因为它同时含污垢系数变化）。
+   网格是合成数据（原文 disclaimer: "This data is synthetic and does not represent
+   any physical products."），只当插值骨架。
+*/
+window.WHCHILLER = {
+  "meta": {
+    "rows": "冷冻水出水温度 ℃（4 点）",
+    "cols": "冷却水进水温度 ℃（4 点）",
+    "unit": "COP（满负荷，净制冷量/输入电功率）",
+    "grid": "ASHRAE Standard 205 RS0001 Curve Set H（水冷离心 0–300 RT；**合成数据**）",
+    "gridSource": "github.com/bigladder/chiller · data.ashrae.org/standard205",
+    "gridCaveat": "合成数据；冷凝方向斜率仅 ≈0.6 %/K（实测 ≈2.5 %/K）、最高一档非单调 ⇒ 只用于蒸发方向形状比",
+    "useFor": "蒸发侧形状比；冷凝侧与绝对水平一律用实测锚点"
+  },
+
+  /* ---- ① 形状参照：ASHRAE 205 网格（合成，逐格照抄自第八轮检索结果）---- */
+  "tChwOutC": [2.22, 8.52, 14.81, 21.11],
+  "tCondInC": [12.78, 23.89, 35.00, 46.11],
+  "cop": [
+    [7.17, 5.63, 5.23, 5.56],
+    [8.67, 6.36, 5.74, 6.00],
+    [9.88, 6.82, 5.97, 6.11],
+    [10.31, 6.84, 5.86, 5.86]
+  ],
+
+  /* ---- ② 实测锚点（模型真正用的数）---- */
+  "anchors": {
+    "refCop": 4.80,
+    "refTcondC": 30.0,
+    "refMachine": "重庆通用 1198 kW 水冷离心机（实测 COP 4.59 @ 7.05℃出水 / 31.96℃进水）",
+    "classLow": 4.80,
+    "classHigh": 6.44,
+    "classNote": "常规离心机 4.80 ↔ 高端磁浮离心机 6.44（×1.34）；基准取常规机（工业存量主流）",
+    "condSensPerKLow": 0.0235,
+    "condSensPerKMid": 0.0246,
+    "condSensPerKHigh": 0.0253,
+    "condSensBasis": "三台真机实测冷凝侧斜率 2.53%（螺杆 GB/T 10870 试验台）/ 2.35%（特灵往复 28 点）/ 2.50%（开利往复 25 点）→ 取均值 2.46 %/K",
+    "refChwOutC": 7.0
+  },
+
+  "sources": [
+    "周邦宁《污垢系数对制冷能力的影响》制冷学报 —— 重庆通用 1198 kW 离心机变温工况：COP 4.59/4.21/4.43 @ 进水 31.96/33.4/32.7℃、出水 7.05/5.8/6.3℃",
+    "台湾能源知识库《国产磁浮离心式冰水机性能概述》（工研院）—— 300RT 磁浮离心：满载 COP 6.45 @ 7.06℃出水/29.92℃进水，IPLV 9.84",
+    "韩彦斌,张彦昌《水冷式冷水机组大温差运行特性试验》制冷与空调 2016,16(2):56-61 —— 螺杆 R22：冷却水进水恒 30.1℃，冷凝出水 35.06→40.64℃，EER 4.56→3.96",
+    "蔡文庆《水冷往复式冷水机组特性研究》制冷学报 —— 特灵 CGWA101M 28 点 / 开利 30HK100 25 点真机二维网格（冷凝出水 30/32/35/40℃、蒸发出水 4~10℃）",
+    "第七轮 R4-C1/C2 —— 离心机部分负荷：满负荷 COP 6.0~6.5、57% 负荷 4.8~5.2、28% 负荷 3.5~4.0（支撑部分负荷折减 0.85）",
+    "ASHRAE Standard 205 RS0001 Curve Set H（合成参考网格，逐格抄录）"
+  ]
+};
+
 /* 两级/串级热水 ORC 效率表（R245fa）—— 由 tools/two_stage_table.py 生成，勿手改。
    每行：[热源进口℃, 源侧降温 K, 冷凝温度℃, 净效率%, 高温级蒸发℃, 低温级蒸发℃]
    净效率已含泵功与厂用电；标定与实测对照见 tools/two_stage_orc.py。
@@ -393,6 +476,51 @@ window.WHENG = (function () {
     comp_cool: [190, 151, 4.2, 0, 3, 104]
   };
 
+  /* ---- 直接换热的"负荷率"锚点（2026-09-29，T-3，第八轮 S3 实测）----
+
+     ★ 先钉一条口径：我们的 **90% 不是 ε**（换热器效能 Q/Qmax），而是
+       "回收热 ÷ 本模型定义的可回收热"——可回收热里已经含了端差与出口温度约束。
+       所以实测 ε **不能直接替换**这个常数（换了就是"一个名字装两个物理量"，
+       §11.2 六问里的第 1 条就不通过），它只能提供"低负荷时相对衰减多少"的信息。
+
+     实测（都是同一台设备跨负荷/流量的对照点，共 6 组）：
+       · 气-气 步进加热炉全焊接板式空预器：ε 0.814（满负荷）→ 0.734（负荷率 0.447）
+         → **相对 0.902**（梅山钢铁，工业加热 2021）
+       · 气-气 三维热管（迎面风速 1.0→3.0 m/s）：ε 0.75 → 0.61 → 相对 0.813（Buildings 2024）
+       · 气-液 LNG 蒸汽锅炉省煤器：**5 个负荷点 ε 基本恒定 ≈0.77**（差异落在测量不确定度内）
+         → 气-液侧对负荷不敏感（Energy Research 2025）
+       · 气-气 矿井热管 4 个现场：η 22.3~56.7%（高湿结露，散得太开 → 只能说明"湿态更差"）
+
+     处置（照 §12.2 分档：只给"带宽 + 边界说明"，**不动名义点值**）：
+       名义值仍取 90%（与已交付材料一致，避免为好看而调低对手/抬高自己）；
+       气-气在**低负荷**（间歇运行）时取下沿 81%（=90×0.902）；气-液不给折减。
+       这不是"预测"，是"换一台/换一种负荷曲线可能差这么多"的风险沟通。 */
+  const DIRECT_EFF_PCT = 90.0;
+  const DIRECT_GAS_GAS_LOW_LOAD_REL = 0.902;           // 实测相对衰减（0.734/0.814）
+  const DIRECT_EFF_GAS_GAS_LOW_LOAD = 81.2;            // = 90 × 0.902
+  /* 判断这条直换是"气-气"还是"气-液"：需求是干燥/烘干且载体是烟气 → 气-气热风。
+     （其余组合：烟气→水/蒸汽、热水→水，都是气-液或液-液，实测显示负荷无关。） */
+  function isGasGasDirect(scene) {
+    if (!scene) return false;
+    const dem = String(scene["需求"] || "");
+    const med = String(scene["载体"] || "");
+    return (dem.indexOf("干燥") >= 0 || dem.indexOf("烘干") >= 0) && med === "烟气";
+  }
+  function directEffRange(scene) {
+    const gasGas = isGasGasDirect(scene);
+    const intermittent = String((scene && scene["连续性"]) || "") === "间歇";
+    return {
+      mid: DIRECT_EFF_PCT,
+      low: gasGas ? DIRECT_EFF_GAS_GAS_LOW_LOAD : DIRECT_EFF_PCT,
+      high: DIRECT_EFF_PCT,
+      mode: gasGas ? "气-气" : "气-液",
+      lowLoad: gasGas && intermittent,
+      note: gasGas
+        ? "气-气直换：实测同设备 ε 在负荷率 45% 时相对满负荷降 9.8%（0.814→0.734）；长期低负荷时名义 90% 应取下沿 81%"
+        : "气-液直换：实测 5 个负荷点 ε 基本恒定 ≈0.77（负荷无关）→ 本常数不折减"
+    };
+  }
+
   const SCALE_REP_KW = { "小": 500.0, "中": 3000.0, "大": 10000.0 };
   const SCALE_EXP = { steam_pp: 0.70, orc: 0.85 };
   const SCALE_EXP_DEFAULT = 0.90;
@@ -403,11 +531,28 @@ window.WHENG = (function () {
   const COP_C_ABS = 0.7;
   const ABS_COOL_T_MIN = 80.0;
   const COP_E_COOL = 5.0;
-  /* 电制冷 COP 的温度依赖（2026-09-29）：原来固定 5.0，等于假设全年 25℃ 环境。
-     改成卡诺型：COP = η × T_evap/(T_cond − T_evap)，冷冻水 7℃、冷凝温度 = 环境 + 5 K。
-     η=0.41 由标定点反算：环境 25℃（冷凝 30℃）→ 卡诺 12.18 → COP 5.00（与原常数一致）；
-     环境 35℃（冷凝 40℃）→ COP 3.48 —— 热天制冷能耗被原来低估约 44%。
-     区间夹在 3.0~6.5。 */
+  /* 电制冷 COP 的温度依赖（2026-09-29 第二批·收口版；数据出处与算术见
+     src/engine/chiller_grid.js 的头部注释）：
+
+        COP(T_cond) = 4.80 × exp(−0.0246 × (T_cond − 30)) × 蒸发侧形状比 × 0.85(部分负荷)
+
+     · 4.80：重庆通用 1198 kW 水冷离心机**实测** COP 4.59（7.05℃出水 / 31.96℃进水）
+       归算到 30℃ 冷凝 → 常规离心机基准（工业存量主流机型）；
+     · 0.0246 /K：**实测**冷凝侧敏感度（螺杆 GB/T 10870-2014 试验台 2.53 %/K，
+       特灵往复 28 点 2.35 %/K、开利往复 25 点 2.50 %/K → 取均值）；
+     · 蒸发侧形状比：ASHRAE 205 合成网格在 (出水温度) 与 (7℃) 两处的比值
+       —— 用"比值"是为了消掉网格的绝对水平误差（网格冷凝方向斜率只有 0.6 %/K、
+       且最高一档非单调，故冷凝方向一律不采用网格）；
+     · 0.85：部分负荷折减（第七轮 R4-C1/C2 实测：57% 负荷 ≈0.80 倍）。
+
+     历史对照：最早固定 5.0（= 假设全年 25℃），上一版改卡诺近似（η=0.41）。
+     本版 25℃ 环境 额定 4.80 / 有效 4.08，与原 5.00/4.25 基本持平；
+     但 **35℃ 环境 有效 3.19**（原 3.48、固定版 4.25）——温度敏感性变陡是这版的主要变化。
+     机器等级带宽：常规离心 4.80 ↔ 高端磁浮 6.44（×1.34），走决策证书扰动项。 */
+  const CHILLER_REF_COP = 4.80;
+  const CHILLER_REF_T_COND = 30.0;
+  const CHILLER_COND_SENS = 0.0246;
+  const CHILLER_CLASS_LOW = 4.80, CHILLER_CLASS_HIGH = 6.44;
   const CHILLER_ETA_CARNOT = 0.41;
   const CHILLER_EVAP_C = 7.0;
   const CHILLER_APPROACH_K = 5.0;
@@ -417,13 +562,56 @@ window.WHENG = (function () {
      我们的场景没有负荷率输入，故按"常年平均负荷率约 60~70%"取折减系数 **0.85**（可调）。
      这一步会让"电制冷基准"更贴近真实，从而让吸收式制冷的相对优势回到合理量级。 */
   const CHILLER_PART_LOAD = 0.85;
+  /* ASHRAE 205 网格插值（合成骨架）。超出网格范围（冷水出水 2.2~21.1℃ /
+     冷却水进水 12.8~46.1℃）按边界值，不外推。 */
+  function chillerCopFromGrid(tChwOut, tCondIn) {
+    const G = window.WHCHILLER;
+    if (!G) return null;
+    const xs = G.tChwOutC, ys = G.tCondInC, m = G.cop;
+    const clampIdx = (arr, v) => {
+      let i = 0;
+      while (i < arr.length - 1 && v > arr[i + 1]) i++;
+      return i;
+    };
+    const lerp = (a, b, f) => a + (b - a) * f;
+    const i = clampIdx(xs, tChwOut), j = clampIdx(ys, tCondIn);
+    const i2 = Math.min(i + 1, xs.length - 1), j2 = Math.min(j + 1, ys.length - 1);
+    const fx = xs[i2] > xs[i] ? Math.min(Math.max((tChwOut - xs[i]) / (xs[i2] - xs[i]), 0), 1) : 0;
+    const fy = ys[j2] > ys[j] ? Math.min(Math.max((tCondIn - ys[j]) / (ys[j2] - ys[j]), 0), 1) : 0;
+    const c = lerp(lerp(m[i][j], m[i2][j], fx), lerp(m[i][j2], m[i2][j2], fx), fy);
+    return c;
+  }
+  /* 蒸发侧形状比（网格只在这里被使用）：网格绝对水平与冷凝方向都不可信，
+     但两者之比可以把"绝对水平"消掉；冷凝方向仍然走实测斜率。 */
+  function chillerEvapShapeFactor(tChwOut, tCondIn) {
+    const a = chillerCopFromGrid(tChwOut, tCondIn);
+    const b = chillerCopFromGrid(CHILLER_EVAP_C, tCondIn);
+    if (a === null || b === null || !(b > 0)) return 1.0;
+    return clamp(a / b, 0.6, 1.6);
+  }
+  /* 电制冷机的**整机等级**缩放（默认 1.0 = 常规离心机基准 4.80）：
+     只给决策证书的扰动测试用（1.0 → 6.44/4.80 = 1.34 表示"换成高端磁浮机"）。 */
+  function chillerClassScale() {
+    const v = Number(PRICES.chillerClass);
+    return (v > 0) ? v : 1.0;
+  }
   function electricChillerCop(scene) {
     const tAmb = Number(ambientC());
     const tCond = (scene && Number(scene["环境温度_degC"])) ? Number(scene["环境温度_degC"]) + CHILLER_APPROACH_K
       : tAmb + CHILLER_APPROACH_K;
-    const te = CHILLER_EVAP_C + 273.15, tc = tCond + 273.15;
-    if (!(tc > te + 1.0)) return COP_E_COOL;
-    return clamp(CHILLER_ETA_CARNOT * te / (tc - te), 3.0, 6.5) * CHILLER_PART_LOAD;
+    const rated = CHILLER_REF_COP * chillerClassScale()
+      * Math.exp(-CHILLER_COND_SENS * (tCond - CHILLER_REF_T_COND))
+      * chillerEvapShapeFactor(CHILLER_EVAP_C, tCond);
+    return clamp(rated, 1.6, 14.0) * CHILLER_PART_LOAD;
+  }
+  /* 机器等级带宽（有效值口径，含部分负荷折减）——用于界面的风险沟通与决策证书。
+     low = 常规离心机（基准）、high = 高端磁浮变频机（实测锚点 6.44）。 */
+  function electricChillerCopBand(scene) {
+    const mid = electricChillerCop(scene);
+    const lo = mid * (CHILLER_CLASS_LOW / CHILLER_REF_COP);
+    const hi = mid * (CHILLER_CLASS_HIGH / CHILLER_REF_COP);
+    return { mid: mid, low: lo, high: hi,
+             note: "机器等级带宽：常规离心机 ↔ 高端磁浮变频机（实测锚点 ×1.34）" };
   }
   /* 当前场景下的电制冷 COP（由 buildMatrixV2 每轮设置，供各公式读取） */
   let CHILLER_COP = COP_E_COOL;
@@ -520,9 +708,12 @@ window.WHENG = (function () {
                     准入值）。默认取实测均值 3.43，只作用于产热类路径。 */
                  heatAuxKwhGj: 3.43,
                  /* 扰动开关（只给"决策证书"用，默认 1.0 = 不缩放）：
-                    effScale 缩放发电类效率与热泵 COP；investScale 缩放投资列。 */
+                    effScale 缩放发电类效率与热泵 COP；investScale 缩放投资列；
+                    chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.80，
+                    1.34 = 高端磁浮变频机 6.44，见 chiller_grid.js）。 */
                  effScale: 1.0,
                  investScale: 1.0,
+                 chillerClass: 1.0,
                  /* 储热收益口径："heat"＝售热（替代燃料，原口径）、
                     "arbitrage"＝峰谷套利（替代峰段电加热）、"stack"＝两者叠加（见注意事项）、
                     "off"＝不计收益（只做技术展示）。 */
@@ -555,6 +746,7 @@ window.WHENG = (function () {
     if (p.heatAuxKwhGj >= 0) PRICES.heatAuxKwhGj = Number(p.heatAuxKwhGj);
     if (p.effScale > 0) PRICES.effScale = Number(p.effScale);
     if (p.investScale > 0) PRICES.investScale = Number(p.investScale);
+    if (p.chillerClass > 0) PRICES.chillerClass = Number(p.chillerClass);
   }
   function elecPrice() { return PRICES.elec; }
   function heatingHoursCap() { return PRICES.heatingHours; }
@@ -1457,11 +1649,20 @@ window.WHENG = (function () {
   function orcEffRange(d) {
     if (!d) return null;
     const ref = d.design === "two-stage" ? ORC2_REF_ETA_T : ETA_T_REF;
+    /* 装置效应带宽（2026-09-29，回应 E2 的负结果）：
+       590 点实测显示，实现率的最大/最小倍数中位是 6.25×，且**装置级效应是主导因素**
+       （工质只解释 9.1%、规模 20.7%）。所以除了"η_t 假设带"，还要报一条
+       **跨装置实测带宽**：RR 的 P10/P90 = 0.291/0.667，相对中位 0.491 即 ×0.593 / ×1.358。
+       这条带宽**用于风险沟通**（"换一台机器可能差这么多"），不是预测区间。 */
+    const DEV_LOW = 0.593, DEV_HIGH = 1.358;
     return {
       mid: d.effPct,
       low: d.effPct * (ETA_T_LOW / ref),
       high: d.effPct * (ETA_T_HIGH / ref),
-      refEtaT: ref
+      refEtaT: ref,
+      deviceLow: d.effPct * DEV_LOW,
+      deviceHigh: d.effPct * DEV_HIGH,
+      deviceNote: "跨装置实测带宽（590 点 RR 的 P10~P90，相对中位 ×0.59~×1.36）"
     };
   }
 
@@ -1970,6 +2171,16 @@ window.WHENG = (function () {
       const tDry = s["需求温度_degC"] || 100.0;
       const lo = Math.max(60.0, tDry + dT);
       const margin = t - lo;
+      /* 气-气直换的低负荷带宽（2026-09-29 T-3）：实测同设备 ε 在负荷率 45% 时
+         相对满负荷降 9.8%；间歇运行意味着长期处于低负荷段，故点名提示。 */
+      if (keys.direct && isGasGasDirect(s)) {
+        const r = directEffRange(s);
+        notes.push("ℹ 能效口径提示（气-气直换）：本模型名义取 " + r.mid.toFixed(0) +
+          "%（口径＝回收热 ÷ 可回收热，不是换热器效能 ε）。实测同设备 ε 在负荷率 45% 时" +
+          "相对满负荷降 9.8%，故低负荷段建议按 " + r.low.toFixed(0) + "% 复核" +
+          (r.lowLoad ? "；本场景标为**间歇**运行，属于低负荷高发情形，建议优先按 " + r.low.toFixed(0) + "% 定容。" : "。") +
+          "（ε 实测点：梅山钢铁板式空预器 0.814→0.734、三维热管 0.75→0.61）");
+      }
       if (keys.direct && margin >= 0 && margin < BOUNDARY_NOTICE_BAND) {
         if (margin < BOUNDARY_HIGH_SENSITIVE) {
           notes.push("⚠ 边界工况提示（S2 型）：热源 " + t.toFixed(0) + "℃ 仅比干燥直接热风下限 " + lo.toFixed(0) +
@@ -2059,6 +2270,13 @@ window.WHENG = (function () {
       function () { PRICES.heatAuxKwhGj = 6.0; });
     probe("输配电耗取 0", "3.43 → 0（检验「热会自己走到用户那里」这个旧假设）",
       function () { PRICES.heatAuxKwhGj = 0.0; });
+    /* 电制冷基准机型的等级带宽（2026-09-29 第二批）：常规离心机实测 4.80
+       ↔ 高端磁浮变频机实测 6.44（工研院 TAF）。电制冷是"制冷类"路径的对手，
+       因此这一项直接决定吸收式/压缩式的胜负，必须单列一条扰动。 */
+    probe("电制冷按高端机（+34%）", "基准 COP 4.80 → 6.44（工研院磁浮离心实测）",
+      function () { PRICES.chillerClass = CHILLER_CLASS_HIGH / CHILLER_REF_COP; });
+    probe("电制冷按老旧机（−15%）", "基准 COP 4.80 → 4.08（污垢/低效机组方向）",
+      function () { PRICES.chillerClass = 0.85; });
     if (res.keys && (res.keys.indexOf("pcm_storage") >= 0 || res.keys.indexOf("tc_storage") >= 0)) {
       probe("储热改为峰谷套利口径", "售热 → 峰谷套利（替代峰段电加热）",
         function () { PRICES.storageMode = "arbitrage"; });
@@ -2201,7 +2419,11 @@ window.WHENG = (function () {
     heatTransportKwhGj, heatTransportKwh, heatTransportCo2, hpSizeFactor,
     orcEffRange, ETA_T_LOW, ETA_T_HIGH,
     orcCondP50, orcCondUsable,
-    electricChillerCop, chillerCop, CHILLER_ETA_CARNOT,
+    electricChillerCop, chillerCop, CHILLER_ETA_CARNOT, chillerCopFromGrid,
+    chillerEvapShapeFactor, electricChillerCopBand,
+    CHILLER_REF_COP, CHILLER_REF_T_COND, CHILLER_COND_SENS,
+    CHILLER_CLASS_LOW, CHILLER_CLASS_HIGH, CHILLER_APPROACH_K, CHILLER_EVAP_C,
+    directEffRange, isGasGasDirect, DIRECT_EFF_PCT, DIRECT_EFF_GAS_GAS_LOW_LOAD,
     generatorEta, GEN_ETA_CURVE, steamEffRangePct, CHILLER_PART_LOAD,
     expanderMapEta,
     tegEffPct, TEG_CURVE, transportKwhGjFor, dryingTransportKwhGj, DRYING_ELEC_SHARE,
