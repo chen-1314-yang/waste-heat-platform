@@ -2569,13 +2569,30 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
 
      诚实性：扰动用的是**假设区间**，不是"随机数"；区间来源写在 detail 里。
      翻转率是"在我们自己这个模型下的结论稳定性"，不等于"现实中一定如此"。 */
+  /* 假设清单（2026-10-11 扩到 15 条，P-4c）。
+     为什么扩：探针实测发现**证书的「假设」面板与「扰动」面板原先是两套东西** ——
+     有 12 条扰动没有对应的假设条目（其中 9 条是"工程取值/边界"级参数，有依据、有等级、多数真生效）。
+     评委对着界面问"你扰动的这条，登记在哪条假设下"，原版答不上来。这是**口径不一致**，不是小瑕疵。
+     ⚠ 并且按守则 §11「一个名字只许装一个物理量」，把原先混在一起的
+       `hours`（既指场景年运行小时、又指供暖季等效上限）**拆成两行**：
+       `hours`＝**场景自己填的年运行小时**；`heatHoursCap`＝**供暖季等效上限（钳位）**。 */
   const CERT_ASSUMPTIONS = [
-    ["elec", "电价", "9 省官方代理购电到户价中位", "A"],
+    ["elec", "电价", "9 省官方代理购电到户价中位（到户价含输配/基金附加）", "A"],
     ["heatPrice", "热价", "7 份政府定价文件换算出工业蒸汽 75~108 元/GJ", "A-"],
-    ["hours", "年运行小时", "实测区间 5 700（海南炼化实际）~8 000 h（元立 KE100）", "B"],
+    ["hours", "年运行小时（场景值）", "各场景自带；6 个真实项目等效满负荷小时区间 3 313~8 000 h（中位≈6 100）。**平台默认 6 500 h** 只用于缺值时兜底", "B"],
+    ["heatHoursCap", "供暖季等效上限", "3 200 h＝供暖季等效小时上限；**只作用于「供暖·热水」需求**（其余需求不读它）", "工程口径"],
     ["heatAux", "供热输配电耗", "国内热力站实测均值 3.43 kWh/GJ（清华 2020 行业统计）", "A-"],
-    ["orcEff", "发电类效率", "两级模型 4 点标定（RMS 5.0%）/ 单压表+寄生损失+规模修正", "B"],
-    ["capex", "路径投资", "造价分级：A 级 3 条 / B 级 5 条 / C 级 4 条（C 级不作推荐依据）", "分级"]
+    ["deltaT", "换热端差", "场景面板默认 10 K；界面上可直接调，证书按 5 K / 20 K 两端扰动", "工程取值"],
+    ["orcCooldown", "ORC 设计降温程", "两条可用工业实测锚点的中位 46.5 K（海南炼化 48、AKCA 45）", "B"],
+    ["orcEff", "发电类效率（ORC/TEG）", "两级模型 4 点标定（RMS 5.0%）/ 单压表+寄生损失+规模修正", "B"],
+    ["capex", "路径投资", "造价分级：A 级 3 条 / B 级 5 条 / C 级 4 条（C 级不作推荐依据）", "分级"],
+    ["steamEta", "蒸汽轮机容量效率", "实测锚点段 ≥30 MW（30 MW 背压 61.70%、33 MW 凝汽 64.22%，DCS 等熵口径）；**<30 MW 无等熵实测，取区间 55%~80%、不外推幂律**", "实测 + 工程取值"],
+    ["steamBound", "蒸汽朗肯候选边界", "数据覆盖边界 280℃。**参数是活的，但在工况库这 19 行范围内无差别**（库里 250~260℃ 三行都是「工艺蒸汽」，而 steam_pp 只在「发电」分支评估）", "工程取值"],
+    ["genEta", "发电机+机械效率（MW 级）", "1 台 1 kW 台架实测 + 工程常规值（MW 级 0.95~0.97）", "实测 + 工程常规值"],
+    ["exhaustFloor", "气体载体排烟下限", "150℃；高硫煤/酸露点一侧 120、保守一侧 180 作扰动", "工程取值"],
+    ["liquidFloor", "液体载体可用热下限", "40℃；25（有更冷水源）与 80（只有温水/回水）作扰动", "工程取值"],
+    ["chillerClass", "电制冷基准机型", "常规离心机 4.82（重庆通用工厂试验）；高端磁浮 6.44 为**情景值**、依据待标定", "实测 + 情景值"],
+    ["storageMode", "储热收益口径", "默认「售热（替代燃料）」；「峰谷套利（替代峰段电加热）」为替代口径", "工程口径"]
   ];
 
   function decisionCertificate(res, scene, lam, meta) {
@@ -2599,6 +2616,27 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       }
     }
 
+    /* 2026-10-11（P-4a）：**场景侧**扰动。
+       原版 probe() 只能改 PRICES —— 而评委在面板上拖的「年运行小时 / 换热端差」是**场景字段**，
+       证书一条都没扰到。落盘探针实测：这两项的影响面（13/17、15/17）**大于**
+       证书里多数已覆盖项（热价 11/17、发电效率 5/17）⇒ 原版"0 翻转"只覆盖了影响面小的一侧。 */
+    const scene0 = Object.assign({}, scene);
+    function probeScene(name, detail, mut) {
+      Object.keys(saved).forEach(function (k) { PRICES[k] = saved[k]; });
+      try {
+        const sc = Object.assign({}, scene0, mut);
+        const r = runDecision(sc, lam, meta);
+        const top = r.top || "(无候选)";
+        probes.push({ name: name, detail: detail, top: top,
+                      label: DISPLAY[top] || top, flipped: top !== base });
+      } catch (e) {
+        probes.push({ name: name, detail: detail, top: "(出错)", label: "(出错)",
+                      flipped: false, error: String((e && e.message) || e) });
+      } finally {
+        Object.keys(saved).forEach(function (k) { PRICES[k] = saved[k]; });
+      }
+    }
+
     const e0 = saved.elec, h0 = saved.heatPrice, hr0 = saved.heatingHours;
     const amb0 = saved.heatAuxKwhGj;
     probe("电价 −20%", "0.68 → " + (e0 * 0.8).toFixed(2) + " 元/kWh",
@@ -2609,10 +2647,33 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       function () { PRICES.heatPrice = h0 * 0.7; });
     probe("热价 +30%", "98 → " + (h0 * 1.3).toFixed(1) + " 元/GJ",
       function () { PRICES.heatPrice = h0 * 1.3; });
-    probe("年运行小时 ±20%", "按经验证区间 5 700~8 000 h 取两端",
+    /* ⚠ 这两条改的是**供暖季等效上限**（PRICES.heatingHours），**不是**场景「年运行小时」。
+       P-4d（2026-10-11）：原来两条都叫"年运行小时"，与场景字段**同名不同物** ⇒
+       评委照界面复算会得到不同的数。改名，并在明细里写死作用域。 */
+    probe("供暖季等效上限 −20%", "3 200 → " + Math.round(hr0 * 0.8) +
+      " h；**只影响「供暖·热水」需求**（其余需求不读它）",
       function () { PRICES.heatingHours = Math.round(hr0 * 0.8); });
-    probe("年运行小时 +20%", "同上取上端",
+    probe("供暖季等效上限 +20%", "3 200 → " + Math.round(hr0 * 1.2) + " h；作用域同上",
       function () { PRICES.heatingHours = Math.round(hr0 * 1.2); });
+    /* ---- P-4a（2026-10-11）：补上**面板上可拖、原证书一条都没扰**的三个量 ----
+       依据：落盘探针 tools/probe_cert_coverage.js 实测的影响面（场景年运行小时 13/17、
+       换热端差 15/17、ORC 降温程 3/17）。不补，证书的"0 翻转"就只覆盖影响面小的一侧。 */
+    const hrScene = Number(scene0["年运行小时"]) || DEFAULT_RUN_HOURS;
+    probeScene("年运行小时 −40%（限产/停机口径）",
+      hrScene + " → " + Math.round(hrScene * 0.6) + " h",
+      function () { return { "年运行小时": Math.round(hrScene * 0.6) }; });
+    probeScene("年运行小时 +25%（满负荷口径）",
+      hrScene + " → " + Math.round(hrScene * 1.25) + " h",
+      function () { return { "年运行小时": Math.round(hrScene * 1.25) }; });
+    const dT0 = Number(scene0["换热端差_degC"]) || 10;
+    probeScene("换热端差取 5 K（强化换热）", dT0 + " → 5 K（换热面积↑、可用热↑）",
+      function () { return { "换热端差_degC": 5 }; });
+    probeScene("换热端差取 20 K（保守）", dT0 + " → 20 K（换热面积↓、可用热↓）",
+      function () { return { "换热端差_degC": 20 }; });
+    probe("ORC 设计降温程取 30 K", saved.orcCooldown + " → 30 K（可用热少、蒸发温度高）",
+      function () { PRICES.orcCooldown = 30.0; });
+    probe("ORC 设计降温程取 60 K", saved.orcCooldown + " → 60 K（可用热多、蒸发温度低）",
+      function () { PRICES.orcCooldown = 60.0; });
     probe("发电效率取下沿", "膨胀机等熵效率 0.7897 → 0.72（R245fa 商用机队中位）",
       function () { PRICES.effScale = ETA_T_LOW / 0.7897; });
     probe("发电效率取上沿", "膨胀机等熵效率 0.7897 → 0.90（效率表扫描上界）",
@@ -2640,9 +2701,15 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
       function () { PRICES.steamEtaCapScale = 0.55 / 0.617; });
     probe("蒸汽轮机效率取上沿", "MW 级等效 η_t 0.617 → 0.80（水泥窑设计相对内效率口径）",
       function () { PRICES.steamEtaCapScale = 0.80 / 0.617; });
-    probe("蒸汽边界下移到 250℃", "候选区间 → 250~650℃（按实际工程做法反推）",
+    /* P-4b（2026-10-11）：参数是活的，但**在工况库这 19 行范围内无差别** ——
+       库里 250~260℃ 三行（#1/#5/#9）全是「工艺蒸汽」需求，而 steam_pp 只在 stage1 的
+       **「发电」分支**里评估（decision_core.js 1106 行）。不改明细，这条就是"看起来在测、其实测不动"。 */
+    probe("蒸汽边界下移到 250℃",
+      "候选区间 → 250~650℃（按实际工程做法反推）。⚠ 参数是活的，但**在工况库这 19 行内无差别**：" +
+      "库里 250~260℃ 三行都是「工艺蒸汽」，而蒸汽朗肯只在「发电」分支评估",
       function () { PRICES.steamBoundC = 250.0; });
-    probe("蒸汽边界上移到 350℃", "候选区间 → 350~650℃（更保守立场）",
+    probe("蒸汽边界上移到 350℃",
+      "候选区间 → 350~650℃（更保守立场）。⚠ 同上：库范围内无差别（合成「发电·烟气 300℃」场景下 350℃ 会剔掉蒸汽朗肯）",
       function () { PRICES.steamBoundC = 350.0; });
     probe("MW 级发电机效率取上沿", "0.95 → 0.97（工程取值上沿，无实测）",
       function () { PRICES.genEtaScale = 0.97 / 0.95; });
@@ -2667,10 +2734,34 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
       candidates: res.keys.map(function (k) { return DISPLAY[k]; }),
       probes: probes, flips: flips.length, total: probes.length,
       assumptions: CERT_ASSUMPTIONS.map(function (row) {
-        var v = { elec: saved.elec, heatPrice: saved.heatPrice,
-                  hours: saved.heatingHours, heatAux: saved.heatAuxKwhGj,
-                  orcEff: null, capex: null }[row[0]];
-        return { key: row[0], name: row[1], value: v, source: row[2], grade: row[3] };
+        const rawH = Number(scene0["年运行小时"]);
+        const usedH = (res.scene && res.scene["年运行小时"] !== undefined)
+          ? Number(res.scene["年运行小时"]) : rawH;
+        const V = {
+          elec: saved.elec,
+          heatPrice: saved.heatPrice,
+          /* P-4d（2026-10-11）：这一行显示**场景实际用的小时数**（可能已被上限折算），
+             **不是**上限本身。原版显示 PRICES.heatingHours（3200），与场景面板同名不同物 ⇒
+             评委照界面复算会得到不同的数。 */
+          hours: (usedH !== rawH)
+            ? (usedH + " h（表值 " + rawH + " h，已按供暖季等效上限 " + heatingHoursCap() + " h 折算）")
+            : (usedH + " h"),
+          heatHoursCap: heatingHoursCap() + " h",
+          heatAux: saved.heatAuxKwhGj + " kWh/GJ",
+          deltaT: ((Number(scene0["换热端差_degC"]) || 10) + " K"),
+          orcCooldown: saved.orcCooldown + " K",
+          orcEff: null, capex: null,
+          steamEta: "MW 级 η_t = " + STEAM_ETA_REF + "；<30 MW 取区间 55%~80%（×" +
+            (0.55 / STEAM_ETA_REF).toFixed(3) + " / ×" + (0.80 / STEAM_ETA_REF).toFixed(3) + "）",
+          steamBound: saved.steamBoundC + "℃",
+          genEta: "MW 级 0.95（扰动取上沿 0.97）；当前缩放 " + saved.genEtaScale,
+          exhaustFloor: saved.steamExhaustFloorC + "℃",
+          liquidFloor: saved.liquidFloorC + "℃",
+          chillerClass: saved.chillerClass + " × 常规离心机 " + CHILLER_REF_COP +
+            " ⇒ 等效 COP " + (CHILLER_REF_COP * saved.chillerClass).toFixed(2),
+          storageMode: saved.storageMode
+        };
+        return { key: row[0], name: row[1], value: V[row[0]], source: row[2], grade: row[3] };
       }),
       statement: flips.length === 0
         ? ("在上述 " + probes.length + " 项假设扰动下，推荐结论**没有变化**"
@@ -3408,7 +3499,7 @@ function renderCert(res, scene) {
   if (!c) { box.textContent = "—"; return; }
   const flipClass = c.flips ? "warn" : "";
   const aRows = c.assumptions.map((a) =>
-    `<tr><td>${a.name}</td><td>${a.value === null ? "见各路径" : num(a.value, 2)}</td>` +
+    `<tr><td>${a.name}</td><td>${(a.value === null || a.value === undefined) ? "见各路径" : (typeof a.value === "string" ? a.value : num(a.value, 2))}</td>` +
     `<td class="small">${a.source}</td><td>${a.grade}</td></tr>`).join("");
   const pRows = c.probes.map((p) =>
     `<tr class="${p.flipped ? "best" : ""}"><td>${p.name}</td>` +
@@ -3422,10 +3513,17 @@ function renderCert(res, scene) {
     `<table><thead><tr><th>假设</th><th>当前取值</th><th>证据</th><th>等级</th></tr></thead>` +
     `<tbody>${aRows}</tbody></table>` +
     `<h4 style="margin:12px 0 4px">② 逐条扰动的后果（${c.flips}/${c.total} 项会翻转）</h4>` +
+    /* 2026-10-11（P-4a~d 配套）：把"这个结论管到哪"写在扰动表**上面**。
+       两个边界缺一不可 —— ① 只在工况库这 19 行内 ② 只在这 N 项扰动内。
+       库外场景、以及界面上其它未扰动的滑块，都不在这个结论的覆盖范围里。 */
+    `<p class="small muted">⚠ <b>本结论的适用范围</b>：只在<b>工况库这 19 行（其中 17 行可评）</b>、` +
+    `且只在<b>上表这 ${c.total} 项扰动</b>之内成立。库外场景、以及界面上其它未被扰动的滑块，` +
+    `不在这个结论的覆盖范围内 —— 不要把它读成"对所有工况、所有参数都稳"。</p>` +
     `<table><thead><tr><th>扰动</th><th>口径</th><th>此时推荐的路径</th><th>结论</th></tr></thead>` +
     `<tbody>${pRows}</tbody></table>` +
-    `<p class="small muted">说明：扰动区间取自各自的证据来源（如电价用 9 省到户价离散、` +
-    `年运行小时用实测 5 700~8 000 h、效率用实测膨胀机效率的下沿 0.72 与扫描上界 0.90）。` +
+    `<p class="small muted">说明：扰动区间取自各自的证据来源（电价用 9 省到户价离散；` +
+    `年运行小时按 −40%／+25% 取"限产/停机"与"满负荷"两端；换热端差取 5 / 20 K 两端；` +
+    `ORC 设计降温程取 30 / 60 K 两端；效率用实测膨胀机效率的下沿 0.72 与扫描上界 0.90）。` +
     `"稳定"指在我们这个模型下、该假设取到区间端点时推荐不变；这不等于现实中一定不变，` +
     `但如果某条假设一碰就翻，那就说明这条推荐**依赖那个假设**，需要优先去把它坐实。</p>`;
 }
