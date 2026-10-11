@@ -743,6 +743,16 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
                  effScale: 1.0,
                  investScale: 1.0,
                  chillerClass: 1.0,
+                /* 2026-10-09 新增：三项"工程取值/边界"从硬编码变成可扰动参数
+                   （证书里逐项扰动，看推荐会不会翻）：
+                     steamBoundC       蒸汽朗肯候选边界温度℃（默认 280，数据边界）
+                     steamEtaCapScale  蒸汽轮机容量效率的额外缩放（1.0=主值）
+                     genEtaScale       发电机+机械效率缩放（MW 级 0.95~0.97 是工程取值） */
+                steamBoundC: 280.0,
+                steamEtaCapScale: 1.0,
+                genEtaScale: 1.0,
+                steamExhaustFloorC: 150.0,
+                liquidFloorC: 40.0,
                  /* 储热收益口径："heat"＝售热（替代燃料，原口径）、
                     "arbitrage"＝峰谷套利（替代峰段电加热）、"stack"＝两者叠加（见注意事项）、
                     "off"＝不计收益（只做技术展示）。 */
@@ -776,6 +786,11 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     if (p.effScale > 0) PRICES.effScale = Number(p.effScale);
     if (p.investScale > 0) PRICES.investScale = Number(p.investScale);
     if (p.chillerClass > 0) PRICES.chillerClass = Number(p.chillerClass);
+    if (p.steamBoundC > 0) PRICES.steamBoundC = Number(p.steamBoundC);
+    if (p.steamEtaCapScale > 0) PRICES.steamEtaCapScale = Number(p.steamEtaCapScale);
+    if (p.genEtaScale > 0) PRICES.genEtaScale = Number(p.genEtaScale);
+    if (p.steamExhaustFloorC > 0) PRICES.steamExhaustFloorC = Number(p.steamExhaustFloorC);
+    if (p.liquidFloorC > 0) PRICES.liquidFloorC = Number(p.liquidFloorC);
   }
   function elecPrice() { return PRICES.elec; }
   function heatingHoursCap() { return PRICES.heatingHours; }
@@ -900,6 +915,13 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     if (s["换热端差_degC"] === undefined || s["换热端差_degC"] === null) s["换热端差_degC"] = 10;
     if (s["规模_kW"] === undefined || s["规模_kW"] === null) s["规模_kW"] = null;
     if (s["流量_kg_s"] === undefined || s["流量_kg_s"] === null) s["流量_kg_s"] = null;
+    /* 2026-10-11（C 类体检）：**载体必须在最外层拒掉**。
+       以前传 "蒸汽" 也会 ok:true，异常要等到很深的 cpOf 才抛——
+       正是"最外层说通过、真拒绝在深处"那一类（DSH 硬审计报的）。 */
+    if (CP[s["载体"]] === undefined) {
+      return { ok: false, error: "未知的载体：" + s["载体"] +
+        "（可用值：" + Object.keys(CP).join(" / ") + "）" };
+    }
     const demand = s["需求"];
     if (UNSUPPORTED_DEMAND.indexOf(demand) >= 0) {
       return { ok: false, error: "需求「" + demand + "」未单列为 v2 需求类型：除湿并入供冷/干燥场景后评价，模型无法单独评价。" };
@@ -930,7 +952,7 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     if (m) {
       const dt = Math.max(Number(scene["热源温度_degC"]) - heatFloor(scene) -
                           Number(scene["换热端差_degC"]), 5.0);
-      return Number(m) * CP[scene["载体"]] * dt;
+      return Number(m) * cpOf(scene["载体"]) * dt;
     }
     const q = scene["规模_kW"];
     if (q) return Number(q);
@@ -955,7 +977,9 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
            仍能取出至少 10 K 的温降，而不是被算成 0。
 
      发电类暂不改：ORC 的取值需要"按路径分别算回收热"（ORC 与蒸汽朗肯的
-     降温程不同），属于下一步的重构，已在边界页登记。 */
+     降温程不同），属于下一步的重构，已在边界页登记。
+     ✅ **2026-10-11 更新：该重构已完成**——见下方 `qForPath()`（ORC/蒸汽/TEG 各有自己的取热函数）。
+     上句描述的状态**已不成立**，勿据它判断现状。 */
   const HEAT_MIN_COOLDOWN_K = 10.0;
 
   /* ---- 发电类的源侧降温设计（2026-09-27 按实测锚点建立）----
@@ -982,10 +1006,27 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
        （酸露点 + 经济性）。实测参照：宁国水泥厂 4000 t/d 线的 PH 炉 350→250℃、
        AQC 炉 360→91℃（《水泥》类年报数据）；取 150℃ 作偏保守的典型值。
 
-     ⚠ 已知局限（如实登记）：我们的 ORC 效率表标定范围是**异丁烷、p_high 1.8~3.6 MPa**，
-     对应蒸发温度 ≥100℃；而真实那个项目用 R245fa 在更低压力/温度下工作（蒸发约 65℃）。
-     因此本模型对"低温宽温差"型 ORC 会**偏保守**（燕山石化锚点上约偏低 2.4 倍）。
-     要消除这个偏差需要扩展 ORC 设计空间（低压段重新扫描），已登记为下一步。 */
+     ⚠ 低压段/低温宽温差：**这项扩展已经做完了**（2026-10-10 订正——本节原来写着
+       "标定范围是异丁烷 p_high 1.8~3.6 MPa、对应蒸发 ≥100℃…已登记为下一步"，那是**过期注释**）：
+       · 2026-09-27：一维效率表下探到 **60℃ 蒸发**（`tools/scan_orc_lowtemp.py`，异丁烷低压段 + R245fa，7,550 点）；
+       · 2026-09-29：新增**二维表（蒸发×冷凝）**，覆盖 **蒸发 60~150℃ × 冷凝 20~65℃**，工质 `[Isobutane, R245fa]`
+         （`tools/orc_cond_table.py` → `src/engine/orc_cond_table.js`）——液体热源按**真实冷源温度**查表，
+         取代原来隐含 50~62℃ 的一维表。
+       · 原注释引的**燕山石化锚点早已被剔除**（额定 900 kW 隐含热效率 16% > 循环卡诺 8.9%，物理上不成立），
+         所以那句"偏低 2.4 倍"**引的是一个已作废的数**。
+     ⚠ **剩余的真实偏差（2026-10-10 实测，已定稿）**：低温宽温差锚点 **Chena（82→65℃ 地热）**上，
+       产品路径（cond-aware，**按站点 ambient 10℃**）给 **7.66% / 254 kW** vs 实测 **312 kW** → **−18.7%**。
+       ⚠ **表述口径（务必照此，2026-10-10 DSH 指出）**：这是「**在适用域下沿偏保守 18.7%**」，
+       **不能写成"模型整体偏低 18.7%"**——该点热源仅 82℃，`orcDesignEvapTemp` 被**下限 60℃ 夹住**、
+       可用跨度只剩 **17 K**，而本表标定档是"蒸发 ≥100℃"、二维表也只到 60℃ 的下边界。
+       「边界工况、方向保守」与「模型不准」对评委是两件完全不同的事。
+       ⚠ 这个数**我先后报错过两次**，都记在这里免得后人重踩：
+         ① 先报 **−68%** —— 那是我 10-09 那条 P4 越界校验**写出的回归**（`tc < tcLo` 把 tCond=15℃
+            直接拒绝，而旧代码会吸附到表下限 20℃ 用二维表）；**已修**（两侧各留 ±5 吸附余量）。
+         ② 再报 **−38%** —— 那是我**探针用错 ambient**（用默认 25℃ 而非脚本按阿拉斯加设的 10℃）得到的。
+       → 正确值 **−18.7%**；`anchor_reconciliation.js` 修好越界校验后已复现该值。
+       → 这条**总体上已缓解**（−18.7% 远小于旧注释说的"2.4 倍"）；若要继续收紧，
+         属"我们自己能跑 CoolProp、把二维表在更低蒸发/更高冷凝处加密"的工作。 */
   const ORC_COOLDOWN_K = 46.5;   // 默认值；运行时用 orcCooldownK() 读取（界面可调）
   const STEAM_EXHAUST_FLOOR_C = 150.0;
 
@@ -1004,28 +1045,109 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
   function orcRecoveredKw(scene) {
     const m = Number(scene["流量_kg_s"]);
     if (!m) { const q = Number(scene["规模_kW"]); return q || 0; }
+    /* 不可行时不给"虚构可回收热"（2026-10-09，DSH 复核 P5） */
+    if (!orcFeasible(scene).ok) return 0;
     const span = Math.max(Number(scene["热源温度_degC"]) - orcEvapTemp(scene) -
       Number(scene["换热端差_degC"]), 5.0);
     return m * CP[scene["载体"]] * span;
   }
+  /* ORC 可行性前置（2026-10-09，DSH 复核 P5）
+     判据：蒸发温度必须低于「热源温度 − 换热端差 − 最小传热温差」。
+     我们 ORC 效率表的最低蒸发温度是 60℃，所以要求 tS − dT − 60 ≥ 3 K。
+     不满足 → 该路径不参与推荐（返回 null / 0），而不是靠 clamp 硬算一个正值。
+     ⚠ 边界：3 K 是**工程最小传热温差**（板式/翅片换热器常见 1~5 K 的下沿），
+       属工程取值，不是某个项目的实测；它只决定"能不能算"，不参与效率数值。 */
+  const ORC_PINCH_MIN_K = 3.0;
+  function orcFeasible(scene) {
+    const tS = Number(scene["热源温度_degC"]);
+    const dT = Number(scene["换热端差_degC"]);
+    if (!(tS > 0)) return { ok: false, headroomK: null, reason: "缺少热源温度" };
+    const headroom = tS - (isNaN(dT) ? 0 : dT) - 60.0;
+    if (headroom < ORC_PINCH_MIN_K) {
+      return { ok: false, headroomK: headroom,
+        reason: "热源 " + tS + "℃ 减换热端差后只剩 " + headroom.toFixed(1) +
+                " K 高于 ORC 表最低蒸发温度 60℃（需 ≥" + ORC_PINCH_MIN_K + " K）" };
+    }
+    return { ok: true, headroomK: headroom };
+  }
+  /* ---------- 载体/下限类守卫与参数（2026-10-09，DSH 复核 ④①C1）----------
+
+     ④ 载体守卫：以前 `CP[scene["载体"]]` 在载体名不在表里时是 undefined，
+        乘积静默变成 **NaN** —— 探针会拿到"看起来正常但是空"的数
+        （DSH 与我各踩过一次：我用 `热水/冷凝水` 而引擎要 `热水·冷凝水`，
+         于是 q=NaN、ORC 仍报 2.3756%，差点误报）。现在未知载体**直接抛错**，
+         让问题在调用点就暴露，而不是变成 NaN 往下游流。
+
+     ①(b) 排烟下限参数化：`STEAM_EXHAUST_FLOOR_C`（150℃）原先硬编码，
+        证书扰动不到它。C1 之后它会成为**决策驱动项**（TEG 可用热直接砍掉一半），
+        所以必须做成 PRICES 参数并进证书扰动（120 / 180 两档）。
+        ⚠ 语义：150℃ 是**偏保守的工程取值**（注释原文写"取 150℃ 作偏保守的典型值"，
+        同条引的宁国水泥 AQC 实测是 360→91℃），**不是物理硬下限**；
+        酸露点还取决于燃料含硫量（天然气约 50~60℃、高硫煤 120~150℃）→ 故参数化。
+  */
+  function cpOf(medium) {
+    const cp = CP[medium];
+    if (!(cp > 0)) {
+      throw new Error("未知的载体名：" + String(medium) +
+        "（必须在 IO.MEDIUM_MAP 的取值域内；可用值：" + Object.keys(CP).join(" / ") + "）");
+    }
+    return cp;
+  }
+  function isGasCarrier(medium) { return /烟气|排烟|废气/.test(String(medium)); }
+  function steamExhaustFloorC() {
+    return PRICES.steamExhaustFloorC === undefined
+      ? STEAM_EXHAUST_FLOOR_C : Number(PRICES.steamExhaustFloorC);
+  }
+
   function steamRecoveredKw(scene) {
     const m = Number(scene["流量_kg_s"]);
     if (!m) { const q = Number(scene["规模_kW"]); return q || 0; }
-    const span = Math.max(Number(scene["热源温度_degC"]) - STEAM_EXHAUST_FLOOR_C -
+    const span = Math.max(Number(scene["热源温度_degC"]) - steamExhaustFloorC() -
       Number(scene["换热端差_degC"]), 5.0);
-    return m * CP[scene["载体"]] * span;
+    return m * cpOf(scene["载体"]) * span;
+  }
+
+  /* ---- C1（2026-10-09，DSH 复核）：TEG 在**气体载体**上不能再用"降到 40℃"的液体口径 ----
+
+     为什么：`heatFloor()` 的发电分支返回 40℃，那是**液体载体**（热水/冲渣水）的余热口径。
+     套到烟气上等于忽略排烟酸露点 —— 任何人都不该越过这条**载体侧**约束
+     （它和发电技术无关：蒸汽侧早就用了 150℃ 的排烟下限）。
+     所以：气体载体 → 下限取 max(heatFloor, 排烟下限)[=150℃]；液体载体 → 保持 heatFloor(40℃)。
+     这个不对称**是可以解释的**（气体有酸露点、液体没有），已写进口径字典。
+
+     ⚠ DSH 的实现要求：**只改 TEG 的可用热，不要全局动 heatFloor** ——
+       heatFloor 还被其它路径当 qDefault 用，全局改会波及一片。
+     ⚠ 影响预判（DSH 实测给出）：275℃/10 kg/s 烟气/端差 10 → TEG 可用热 2475 → ≈1265 kW，
+       净功率 123.8 → ≈63 kW（与 ORC 42.3 kW 同量级）；TEG 的获胜温区收窄到约 215~280℃。 */
+  function tegRecoveredKw(scene) {
+    const m = Number(scene["流量_kg_s"]);
+    if (!m) { const q = Number(scene["规模_kW"]); return q || 0; }
+    const tSrc = Number(scene["热源温度_degC"]);
+    const dT = Number(scene["换热端差_degC"]);
+    const base = heatFloor(scene);
+    const floor = isGasCarrier(scene["载体"]) ? Math.max(base, steamExhaustFloorC()) : base;
+    return m * cpOf(scene["载体"]) * Math.max(tSrc - floor - dT, 0);
   }
   /* 按路径取回收热：发电类各用自己的设计降温程，其余沿用场景的 q */
   function qForPath(path, scene, qDefault) {
     if (path === "orc") return orcRecoveredKw(scene);
     if (path === "steam_pp") return steamRecoveredKw(scene);
+    /* C1（2026-10-09）：TEG 用**自己**的可用热（气体载体套排烟下限），不再吃默认 q */
+    if (path === "teg") return tegRecoveredKw(scene);
     return qDefault;
   }
   function heatFloor(scene) {
     const tSrc = Number(scene["热源温度_degC"]);
     const dT = Number(scene["换热端差_degC"]);
-    if (scene["需求"] === "发电") return 40.0;   // 暂维持旧口径（见上）
+    /* 2026-10-10（B1）：发电类的源侧下限**从硬编码 40℃ 改成可调参数**。
+       为什么：40℃ 是**工程默认值、不是物理下限**——TEG/ORC 的冷端必须低于载体出口温度，
+       把水冷到 40℃ 隐含了"有 ≤30℃ 的低温冷源"这个假设（DSH 复核指出：不参数化就等于
+       把不可审计的假设从气体侧挪到了液体侧）。默认仍 40℃ 以保持与已交付材料一致。 */
+    if (scene["需求"] === "发电") return liquidFloorC();
     return Math.min(compSupplyTemp(scene) + dT, tSrc - HEAT_MIN_COOLDOWN_K);
+  }
+  function liquidFloorC() {
+    return PRICES.liquidFloorC === undefined ? 40.0 : Number(PRICES.liquidFloorC);
   }
 
   function scaleBand(qKw) { return qKw < 1000 ? "小" : (qKw <= 5000 ? "中" : "大"); }
@@ -1336,10 +1458,17 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       setk("orc", 110 <= t && t <= 350,
         (110 <= t && t <= 350) ? ("热源 " + t + "℃ 在 ORC 适用区间 110~350℃")
           : (t < 110 ? ("热源 " + t + "℃ <110℃，ORC 温差不足") : ("热源 " + t + "℃ >350℃，超出 ORC 标定上限，应走蒸汽朗肯")));
-      setk("steam_pp", 280 <= t && t <= 650,
-        (280 <= t && t <= 650) ? ("热源 " + t + "℃ 满足蒸汽朗肯标定区间 280~650℃（锅炉出口按 min(max(t-100,180),540) 映射）")
-          : (t < 280 ? ("热源 " + t + "℃ <280℃，蒸汽朗肯经济性不足") : ("热源 " + t + "℃ >650℃，超出 v2 标定上限")));
-      setk("teg", t >= 40, t >= 40 ? "TEG 适合 ≥40℃ 温差发电（兜底候选）" : "温差不足");
+      setk("steam_pp", steamBoundC() <= t && t <= 650,
+        (steamBoundC() <= t && t <= 650)
+          ? ("热源 " + t + "℃ 满足蒸汽朗肯候选区间 " + steamBoundC() + "~650℃（锅炉出口按 min(max(t-100,180),540) 映射；边界可调，280℃ 是数据覆盖边界）")
+          : (t < steamBoundC() ? ("热源 " + t + "℃ <" + steamBoundC() + "℃，蒸汽朗肯经济性不足") : ("热源 " + t + "℃ >650℃，超出 v2 标定上限")));
+      /* C1 配套（2026-10-09）：可用热为 0 就不能进候选 —— 否则会出现
+         "没热量却照样算投资/回收期"的混搭（DSH 提醒、我加的守卫实测抓到过）。 */
+      setk("teg", t >= 40 && tegRecoveredKw(scene) > 0,
+        t < 40 ? "温差不足"
+          : (tegRecoveredKw(scene) <= 0
+            ? ("气体载体可用热为 0（排烟下限 " + steamExhaustFloorC() + "℃ 已高于可降温）→ 不进候选")
+            : "TEG 适合 ≥40℃ 温差发电（兜底候选）"));
       ["direct", "whb_steam", "abs_self", "abs_ext", "comp", "tc_storage", "pcm_storage", "abs_cool", "comp_cool"]
         .forEach((p) => setk(p, false, "需求为发电：该路径不产出电力"));
     } else if (demand === "工艺蒸汽") {
@@ -1445,8 +1574,12 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
           ? ("提温调峰候选：COP≈" + compCopFor(scene).cop.toFixed(2) + "（随温度计算）")
           : "无需提温");
       setk("orc", 110 <= t && t <= 350, (110 <= t && t <= 350) ? "发电调峰候选" : "超出 ORC 区间（110~350℃）");
-      setk("steam_pp", 280 <= t && t <= 650, (280 <= t && t <= 650) ? "发电调峰候选" : "超出朗肯标定（280~650℃）");
-      setk("teg", t >= 40, t >= 40 ? "发电兜底候选" : "温差不足");
+      setk("steam_pp", steamBoundC() <= t && t <= 650,
+        (steamBoundC() <= t && t <= 650) ? "发电调峰候选" : ("超出朗肯候选区间（" + steamBoundC() + "~650℃）"));
+      setk("teg", t >= 40 && tegRecoveredKw(scene) > 0,
+        t < 40 ? "温差不足"
+          : (tegRecoveredKw(scene) <= 0 ? "可用热为 0（受排烟下限 " + steamExhaustFloorC() + "℃ 限制）"
+            : "发电兜底候选"));
       setk("whb_steam", t >= (tDem || 152.0) + 20, "产汽调峰候选");
       setk("abs_cool", false, "储热调峰需求不产冷");
       setk("comp_cool", false, "储热调峰需求不产冷");
@@ -1510,22 +1643,66 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     }
     return curve[curve.length - 1][1];
   }
-  /* 蒸汽侧效率区间（2026-09-29，A1，第七轮 R3）：
-     我们蒸汽表隐含的等效等熵效率是 0.7891（二分反解），而第七轮实测：
-       · 印尼 Bintan 33 MW 凝汽机 **64.22%**、30 MW 背压机 61.70%（DCS 高频实测）
-       · 水泥窑余热汽轮机设计绝对内效率 75~85%（CDM 取 80%）
-       · 330 MW 亚临界机组现场试验缸效率 80.4~88.5%
-       · 高背压 CHP 全工况 83.5~93.6%
-     口径不完全统一（等熵效率 / 相对内效率 / 绝对内效率），所以**先不动点值**、
-     而是给出区间：下沿按小机实测比值 0.63/0.7891、上沿按 0.88/0.7891。 */
-  const STEAM_ETA_LOW = 0.63;
-  const STEAM_ETA_HIGH = 0.88;
-  const STEAM_ETA_REF = 0.7891;
-  function steamEffRangePct(tSrc) {
+  /* ---- 蒸汽轮机效率—容量曲线（2026-10-09，第十五批；取代 A1 的"固定区间"）----
+
+     为什么必须换掉固定值：我们那张蒸汽效率表**不是实测拟合**，而是**我们自己用 CoolProp
+     跑的 1,600 个工况**（见知识手册"核心仿真数据"与 docs/2026-09-20-12条路径指标口径体检.md），
+     里面**隐含**了一个固定假设：等效等熵效率 **0.7891**（二分反解出来的）。
+     也就是说这个 0.7891 是**模型假设**，不是任何一台机器的实测值。
+
+     实测锚点（第七轮 R3，全部落在「等熵/缸效率」口径）：
+       · 30 MW 背压机 **61.70%**（DCS 高频实测）
+       · 33 MW 凝汽机 **64.22%**（DCS 高频实测）
+       · 330 MW 亚临界 现场试验 **缸效率 80.4%~88.5%**（缸效率≈相对内效率，与等熵可比）
+     三个点做对数拟合 →  eta_t = 0.4385 × P_MW^0.1046（拟合值与三点偏差 ≤2%）。
+
+     ⚠ 诚实性边界（**必须带着这句话引用**）：
+       1) 我们所有蒸汽工况的装机都在 **30 MW 以下**，而实测锚点最低是 30 MW
+          → **<30 MW 属于外推区，没有等熵实测**。所以那里**不外推**幂律（外推到 1 MW 会得 44%，
+          明显过低），而是**取最小实测机 0.617 并保持**，区间给 0.55~0.80
+          （下沿＝外推被截断前的保守下界，上沿＝水泥窑 MW 级余热汽轮机**设计绝对内效率** 80%）。
+       2) 30~330 MW 段：主值取拟合，区间 ±(0.92~1.05) 覆盖 61.7 vs 64.2 的实测散布与缸效率上沿。
+       3) 口径仍不完全统一（等熵 / 缸效率 / 绝对内）→ 只作**效率量级**修正，不作精度声明。
+
+     净效果：对我们实际的 MW 级蒸汽工况，等效等熵效率由 0.7891 → **0.617**，
+     即蒸汽热效率下调约 **21.8%**（这正是第七轮"对小机组偏乐观约 20%"的落地修正）。 */
+  const STEAM_ETA_REF = 0.7891;                      // 我们仿真表隐含的固定假设（反解值）
+  const STEAM_CAP_FIT = { a: 0.4385, b: 0.1046 };    // eta = a * P_MW^b（3 点对数拟合）
+  const STEAM_ETA_SMALL = 0.617;                     // <30 MW：取最小实测机保持（不外推）
+  const STEAM_ETA_SMALL_LO = 0.55;
+  const STEAM_ETA_SMALL_HI = 0.80;
+  function steamEtaTByCap(capKw) {
+    const pMw = Math.max(Number(capKw) || 0, 0.001) / 1000.0;
+    if (pMw >= 30.0) {
+      const mid = Math.min(0.92, Math.max(0.60,
+        STEAM_CAP_FIT.a * Math.pow(pMw, STEAM_CAP_FIT.b)));
+      return { mid: mid, low: mid * 0.92, high: mid * 1.05, inData: true,
+               note: "30~330 MW 实测锚点（等熵/缸效率口径）" };
+    }
+    return { mid: STEAM_ETA_SMALL, low: STEAM_ETA_SMALL_LO, high: STEAM_ETA_SMALL_HI,
+             inData: false,
+             note: "<30 MW 无等熵实测：取最小实测机 61.7% 保持，区间 55%~80%" };
+  }
+  function steamEtaFactor(capKw) {
+    const s = PRICES.steamEtaCapScale === undefined ? 1.0 : Number(PRICES.steamEtaCapScale);
+    return (steamEtaTByCap(capKw).mid * s) / STEAM_ETA_REF;
+  }
+  /* 蒸汽朗肯候选边界温度（℃，默认 280）。
+     为什么变成参数：D1（2026-10-09）证明 280 是**数据覆盖下限**被写成规则，
+     不是算出来的经济边界（造价惩罚全区间只有 5.2~6.7×、且几乎与温度无关；
+     能效上蒸汽在 280℃ 以上全面优于 ORC）。所以边界应当可调，并进证书扰动。 */
+  function steamBoundC() {
+    return PRICES.steamBoundC === undefined ? 280.0 : Number(PRICES.steamBoundC);
+  }
+  /* 蒸汽侧效率区间（界面用）。capKw 省略时按 1 MW 算（我们蒸汽工况都在 <30 MW 段）。 */
+  function steamEffRangePct(tSrc, capKw) {
     const e = steamEffPct(tSrc);
     if (e === null || e === undefined) return null;
-    return { mid: e, low: e * (STEAM_ETA_LOW / STEAM_ETA_REF),
-             high: e * (STEAM_ETA_HIGH / STEAM_ETA_REF), refEtaT: STEAM_ETA_REF };
+    const band = steamEtaTByCap(capKw === undefined || capKw === null ? 1000.0 : capKw);
+    return { mid: e * (band.mid / STEAM_ETA_REF),
+             low: e * (band.low / STEAM_ETA_REF),
+             high: e * (band.high / STEAM_ETA_REF),
+             refEtaT: STEAM_ETA_REF, etaT: band.mid, inData: band.inData, note: band.note };
   }
 
   /* ---------- 系统寄生损失修正（工质泵 + 管路压降，2026-09-28 P1-1）----------
@@ -1539,10 +1716,18 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     const P = window.WHPARASITIC;
     let e0 = null, tDesign = null, kind = null;
     if (path === "orc") {
+      /* ⚠ 2026-10-09（P5 补漏）：守卫必须盖住**每一个**入口，不只是场景版入口。
+         我第一版只改了 orcEfficiencyForScene，结果本探针走 netEffPct 仍能在 40℃
+         拿到 1.5334%（因为它直接落到 orcNetEffByEvap，绕过了可行性前置）。
+         这里补同一道前置：不可行就返回 null，而不是靠 clamp 给一个正值。 */
+      if (!orcFeasible({ "热源温度_degC": tSrc, "换热端差_degC": dT }).ok) return null;
       return orcNetEffByEvap(orcDesignEvapTemp(tSrc, dT || 0), qKw);
     } else if (path === "steam_pp") {
       e0 = steamEffPct(tSrc); kind = "steam";
       tDesign = clamp(Number(tSrc) - 100.0, 180.0, 540.0);
+      /* 2026-10-09：先把"固定 eta_t=0.7891"换成容量相关的蒸汽轮机等熵效率曲线，
+         再扣寄生损失（顺序：修正透平 → 扣泵与压降；两者证据来源不同，不重复扣） */
+      e0 = e0 * steamEtaFactor(Math.max(Number(qKw) * e0 / 100.0, 1e-6));
     } else return null;
     if (e0 === null || e0 === undefined) return null;
     if (!P || !P.hasTable(kind)) return e0;
@@ -1641,21 +1826,68 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     ORCCOND_IDX = idx;
     return idx;
   }
-  /* 返回 P50（kW 净输出/MW 回收热）或 null */
-  function orcCondP50(tEvapC, tCondC) {
+  /* 二维（蒸发温度 × 冷凝温度）表查询。
+     ⚠ 2026-10-09（DSH 复核 P4）——旧实现在查不到格子时会**静默把 tEvap ±5℃**，
+     而且优先取 tEvap−5（方向偏乐观），调用方却仍按请求的 tEvap 做后续计算 → "答非所问"。
+     现在钉死三条规矩：
+       ① **绝不动 tEvap**（动了就是答非所问）；
+       ② 只允许在 tCond 方向做一次 ±5 吸附，且结果必须落在表的实测区间内；
+       ③ 吸附**必须暴露出来**（snappedFrom/snappedTo），供界面与文档标注，不藏。
+     ⚠ 已知边界：环境温度高时算出的 tCond（= 环境 + approach）会高于表覆盖上限，
+       这时靠 tCond 吸附消化，属**外推**，对外表述要写"已吸附到表的上限"。 */
+  let ORCCOND_BOUNDS = null;
+  function orcCondBounds() {
+    if (ORCCOND_BOUNDS) return ORCCOND_BOUNDS;
+    const idx = orcCondIndex();
+    let teLo = 1e9, teHi = -1e9, tcLo = 1e9, tcHi = -1e9;
+    Object.keys(idx).forEach(function (k) {
+      const a = String(k).split("|"), te = Number(a[0]), tc = Number(a[1]);
+      if (isNaN(te) || isNaN(tc)) return;
+      if (te < teLo) teLo = te;
+      if (te > teHi) teHi = te;
+      if (tc < tcLo) tcLo = tc;
+      if (tc > tcHi) tcHi = tc;
+    });
+    ORCCOND_BOUNDS = { teLo: teLo, teHi: teHi, tcLo: tcLo, tcHi: tcHi };
+    return ORCCOND_BOUNDS;
+  }
+  /* 返回 { p50, tEvap, tCond, snappedFrom, snappedTo, bounds }；查不到 p50=null */
+  function orcCondLookup(tEvapC, tCondC) {
     const te = Math.round(Number(tEvapC) / 5) * 5;
     const tc = Math.round(Number(tCondC) / 5) * 5;
-    const idx = orcCondIndex();
-    let row = idx[te + "|" + tc];
-    if (!row) row = idx[(te - 5) + "|" + tc] || idx[(te + 5) + "|" + tc];
-    if (!row) row = idx[te + "|" + (tc - 5)] || idx[te + "|" + (tc + 5)];
-    return row ? row[3] : null;
+    const idx = orcCondIndex(), b = orcCondBounds();
+    let row = idx[te + "|" + tc], snapped = null;
+    if (!row) {
+      const cand = [tc - 5, tc + 5].filter(function (v) { return v >= b.tcLo && v <= b.tcHi; });
+      for (let i = 0; i < cand.length && !row; i++) {
+        row = idx[te + "|" + cand[i]];
+        if (row) snapped = { from: tc, to: cand[i] };
+      }
+    }
+    return { p50: row ? row[3] : null, tEvap: te, tCond: snapped ? snapped.to : tc,
+             snappedFrom: snapped ? snapped.from : null,
+             snappedTo: snapped ? snapped.to : null, bounds: b };
   }
-  function orcCondUsable(scene, tEvapC) {
+  /* 返回 P50（kW 净输出/MW 回收热）或 null（保持旧签名，内部走 orcCondLookup） */
+  function orcCondP50(tEvapC, tCondC) { return orcCondLookup(tEvapC, tCondC).p50; }
+  function orcCondUsable(scene, tEvapC, tCondC) {
     const medium = scene["载体"];
     if (medium !== "热水·冷凝水" && medium !== "工艺液体") return false;
     const te = Number(tEvapC);
-    return te >= 60 && te <= 170;
+    if (!(te >= 60 && te <= 170)) return false;
+    /* 冷凝温度越界校验（2026-10-09，P4）：允许 +5 的吸附余量，超过就判越界 */
+    if (tCondC !== undefined && tCondC !== null) {
+      const b = orcCondBounds();
+      const tc = Number(tCondC);
+      /* ⚠ 2026-10-10 修 bug：原写成 `tc < b.tcLo`（**只给上沿留了吸附余量**），
+         于是 tCond 低于表下限时被**直接拒绝**而不是吸附 —— 实测打断的是
+         `anchor_reconciliation.js` 的 Chena 锚点：那里按阿拉斯加气候设 `ambient: 10`，
+         tCond = 15℃，低于二维表下限 20℃，旧代码会把它吸附到 20℃ 用二维表（→ −18.7%），
+         我这一条却把它毙掉、退回一维表（→ 打印 −68%）。
+         正确做法：**两侧都给 ±5 的吸附余量**，与 orcCondLookup 的吸附方向一致。 */
+      if (b && b.tcHi > 0 && (tc < b.tcLo - 5 || tc > b.tcHi + 5)) return false;
+    }
+    return true;
   }
 
   /* 统一的 ORC 效率入口（场景版）：自动在"两级"与"单压"之间选。
@@ -1698,6 +1930,14 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
   function orcEfficiencyForScene(scene, qKw) {
     const tS = Number(scene["热源温度_degC"]);
     const dT = Number(scene["换热端差_degC"]);
+    /* ⚠ 2026-10-09（DSH 复核 P5）：可行性前置。
+       旧行为：orcDesignEvapTemp 把蒸发温度 clamp 到 [60,350]，于是热源 40~70℃
+       也会"算"出一个 60℃ 蒸发 + 5 K 可用降温 + 正效率（实测 40/50/60/70℃ 全给
+       2.3756%），等于**用一个比热源还冷的蒸发器回收热**——与 D1 查出的
+       "280℃ 是数据覆盖下限被写成规则"完全同型，只是这次在 ORC 侧。
+       现在：不满足最小传热温差就不给值，返回 null（该路径直接不进候选），
+       并由 boundaryNotices 给出可见提示。 */
+    if (!orcFeasible(scene).ok) return null;
     const span = Math.max(tS - orcEvapTemp(scene) - dT, 5.0);
     const tCond = ambientC() + ORC2_APPROACH_K;
     const scale = PRICES.effScale === undefined ? 1.0 : PRICES.effScale;
@@ -1705,18 +1945,33 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       const e2 = twoStageEffPct(tS, span, tCond);
       if (e2 !== null) {
         const cap0 = Math.max(Number(qKw) * e2 / 100.0, 1e-6);
+        /* f 为什么**保留**（2026-10-09 DSH 实测答复，免得下一个人再来问一遍）：
+           4 个标定点（789 / 927 / 1022 / 1340 kW）处 turbineEtaOf = 0.8285~0.8371
+           → f = min(1, η_t/0.80) ≡ **1.0000**，说明"标定值 0.80"与"规模修正"在标定范围内**正交**；
+           f 仅在 cap < 137 kW 时才 <1（100 kW→0.9936、50→0.9796、10→0.9469），
+           那是**真实的规模外推**（表里没有那小段数据），不是把发电机损失扣第二遍。 */
         const f = Math.min(1.0, turbineEtaOf(cap0) / ORC2_REF_ETA_T);
         const g = generatorEta(cap0);
-        return { effPct: e2 * f * g * scale, design: "two-stage", spanK: span, tCondC: tCond,
+        /* ⚠ 2026-10-09（DSH 复核 P1）：这里**不能再乘 g**。
+           两级表 two_stage_table.js 的 meta 自述就是「净效率 %（已扣泵与厂用电）」，
+           生成脚本 tools/two_stage_table.py 里是 net=(g1+g2)*(1-AUX)，
+           而它用的透平等熵效率 0.80 又是拿海南炼化实测**净电功率**（789/927/1022 kW）标定的
+           → 再乘一次发电机效率是**重复扣减**（8.2 kW 处 −21%、2 MW 处 −5%）。
+           结构上还有一层：f 在 ≥200 kW 被 min(1.0,·) 夹成 1、g 恒 <1，
+           于是引擎**永远取不到两级表自己的标定值**。所以改成 e2*f*scale；
+           g 仍作为字段返回，仅供界面展示，标明"表内已含"。 */
+        return { effPct: e2 * f * scale, design: "two-stage", spanK: span, tCondC: tCond,
                  tEvapC: null, sizeFactor: f, parasitic: 0.0,
                  generatorEta: g,
-                 note: "两级/串级（R245fa，实测标定）" };
+                 generatorEtaIncluded: true,
+                 note: "两级/串级（R245fa，实测标定）；表已含厂用电与发电机损失，不再单乘 η_gen" };
       }
     }
     const tEvap = orcDesignEvapTemp(tS, dT);
     /* 液体热源：按真实冷源温度查二维表（2026-09-29） */
-    if (orcCondUsable(scene, tEvap)) {
-      const p50 = orcCondP50(tEvap, tCond);
+    if (orcCondUsable(scene, tEvap, tCond)) {
+      const lk = orcCondLookup(tEvap, tCond);
+      const p50 = lk.p50;
       if (p50 !== null) {
         const e0 = p50 / 10.0;                       // kW/MW → %
         const cap0 = Math.max(Number(qKw) * e0 / 100.0, 1e-6);
@@ -1727,8 +1982,11 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
           ? P.lossPct("orc", clamp(tEvap, 60, 360), cap0) : 0.0;
         return { effPct: (e0 * f * g - loss) * scale, design: "cond-aware",
                  spanK: span, tCondC: tCond, tEvapC: tEvap,
+                 tCondUsedC: lk.tCond,
+                 tCondSnappedFrom: lk.snappedFrom, tCondSnappedTo: lk.snappedTo,
                  sizeFactor: f, parasitic: loss, generatorEta: g,
-                 note: "单压（按真实冷源 " + tCond.toFixed(0) + "℃ 查二维表）" };
+                 note: "单压（按真实冷源 " + tCond.toFixed(0) + "℃ 查二维表" +
+                   (lk.snappedFrom !== null ? "；⚠ 已吸附到表上限 " + lk.snappedTo + "℃" : "") + "）" };
       }
     }
     let eff = orcEffByEvapTemp(tEvap);
@@ -1769,7 +2027,7 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
      ⚠ 这一项**只作用于发电类路径**（ORC/蒸汽/储能发电），热泵与制冷另有各自的效率口径。 */
   const GEN_ETA_CURVE = [[0.5, 0.70], [5.0, 0.80], [50.0, 0.88],
                          [200.0, 0.92], [1000.0, 0.95]];
-  function generatorEta(capKw) {
+  function generatorEtaBase(capKw) {
     const p = Math.max(Number(capKw) || 0, 0.1);
     const c = GEN_ETA_CURVE;
     if (p <= c[0][0]) return c[0][1];
@@ -1782,6 +2040,13 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       }
     }
     return c[c.length - 1][1];
+  }
+  /* 发电机/机械效率的工程取值可被扰动（2026-10-09）：
+     0.5 kW→0.70 有 76 点实测支撑，但 MW 级 0.95 是**工程取值**（无实测），
+     所以让它可调，证书里扰动它，看推荐会不会因此翻转。 */
+  function generatorEta(capKw) {
+    const s = PRICES.genEtaScale === undefined ? 1.0 : Number(PRICES.genEtaScale);
+    return Math.min(0.995, generatorEtaBase(capKw) * s);
   }
   /* ---- 膨胀机部件图谱（A5，2026-09-29）----
 
@@ -1818,7 +2083,13 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
   }
   function turbineSizeFactor(capKw) {
     const curve = Math.min(1.0, turbineEtaOf(capKw) / ETA_T_REF);
-    const mapShaft = expanderMapEta(capKw);
+    /* ⚠ 2026-10-09（DSH 复核 P6g）：图谱 expander_map.js 的档位口径是**轴功率**，
+       而这里传进来的 capKw 是**净电功率** ⇒ 必须先除以发电机效率换算。
+       影响方向：传净电功率会查到**更低**的档 ⇒ 偏保守（宁可低估）；
+       而且只在 <1.5 kW 电功率时才可能命中 ⇒ 属**潜伏错**，不是当前算错
+       （实测 ORC 路径最小装机 ≈33.5 kW，图谱恒返回 null、恒走规模曲线）。
+       修它的理由是"契约要真"，不是为了改数。 */
+    const mapShaft = expanderMapEta(capKw / generatorEta(capKw));
     if (mapShaft === null) return curve;
     const procEquiv = mapShaft / generatorEta(capKw);   // 轴端 → 过程口径上限
     const mapCap = Math.min(1.0, procEquiv / ETA_T_REF);
@@ -2108,6 +2379,16 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
 
   // ---------- 总入口 ----------
   function runDecision(scene, lam, meta) {
+    /* 2026-10-11（C 类体检）：外部复核者直接调本函数时常常不传 meta，
+       以前会在 combinedWeights 深处抛 "Cannot read properties of undefined (reading 'indexOf')"。
+       现在：能从 window.HFDATA.meta 取就自动取；取不到就报**能看懂的错**，不要报 TypeError。 */
+    if (!meta || !Array.isArray(meta.names) || meta.names.length === 0) {
+      const fb = (typeof window !== "undefined" && window.HFDATA && window.HFDATA.meta) || null;
+      if (fb && Array.isArray(fb.names) && fb.names.length) { meta = fb; }
+      else {
+        throw new Error("runDecision 需要 meta（形如 {names,sub,obj}）：请传 window.HFDATA.meta，或显式构造后再调。");
+      }
+    }
     const v = validateScene(scene);
     if (!v.ok) return { out_of_scope: true, message: v.error, warnings: [v.error], keys: [], labels: [], X: null, scene: null };
     const s = v.scene;
@@ -2177,6 +2458,36 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
     const keys = {};
     res.keys.forEach((p) => { keys[p] = true; });
     const notes = [];
+    /* ORC 不可行提示（2026-10-09，DSH 复核 P5）：过去 tEvap 被 clamp 到 60℃，
+       热源 40~70℃ 也会给出正效率与"5 K 可用降温"；现在不可行就不进候选，这里显式说明。 */
+    const orcFeas = orcFeasible(s);
+    if (!orcFeas.ok && !keys.orc) {
+      notes.push("⚠ ORC 路径不可用（可行性前置）：" + orcFeas.reason +
+        "。这是数据边界被当成可用范围的老问题（与蒸汽侧 280℃ 同型），现已改为明确拒绝而不是给一个偏乐观的值。");
+    }
+    /* C2（2026-10-09）：TEG 的效率口径是"上界"，必须显式标注 */
+    if (keys.teg) {
+      notes.push("ℹ TEG 口径提示：它的转换效率按**单模块温差**（热源−环境）取曲线值，" +
+        "而热量按**整段可用降温**计 —— 相当于假设每个模块都看到全段温差，属**上界**，不是逐段串联的真实值。" +
+        "对外引用 TEG 的发电量时请带上这句。");
+    }
+    /* C3（2026-10-09，DSH 要求）：获胜路径若在"能效 / 投资 / 回收期"三项上都不如某个被它击败的候选，
+       说明不同路径很可能用了**不同口径**（P2 病灶的典型症状）→ 必须在界面上报警。
+       X 列顺序：0 能效%（max）· 1 投资万元/MW装机（min）· 2 回收期年（min）。 */
+    if (res.order && res.order.length > 1) {
+      const tr = res.order[0].row;
+      const labelOf = {};
+      res.keys.forEach((k, i) => { labelOf[k] = res.labels ? res.labels[i] : k; });
+      const allWorse = res.order.slice(1).filter(function (o) {
+        const r = o.row;
+        return r[0] > tr[0] && r[1] < tr[1] && r[2] < tr[2];
+      }).map(function (o) { return labelOf[o.path] || o.path; });
+      if (allWorse.length) {
+        notes.push("⚠ **口径失效报警**：获胜路径「" + (labelOf[res.top] || res.top) +
+          "」在**能效、投资、回收期三项**上都不如被它击败的：" + allWorse.join("、") +
+          " —— 这种「三项全差却获胜」通常是不同路径用了**不同口径**造成的（见 docs/2026-10-09-P2方案_发电类可用热口径统一.md），请人工复核后再据此决策。");
+      }
+    }
     if (demand === "供暖·热水") {
       const tDem = s["需求温度_degC"] || 60.0;
       const lo = Math.max(60.0, tDem + dT);
@@ -2307,6 +2618,30 @@ probe("电制冷按高端机（情景 +34%）", "基准 COP 4.82 → 6.44（高�
       function () { PRICES.chillerClass = CHILLER_CLASS_HIGH / CHILLER_REF_COP; });
 probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/低效机组方向）",
       function () { PRICES.chillerClass = 0.85; });
+    /* ---- 三项“工程取值/边界”扰动（2026-10-09，第十五批）----
+       为什么加：这些量以前是**硬编码**的，评委问“这个数怎么来的、错了会怎样”时
+       只能靠嘴解释。改成参数后，证书能直接回答“它错了推荐会不会翻”。
+       每一项的取值依据都写在对应函数的注释里，没有实测的一律标“工程取值”。 */
+    probe("蒸汽轮机效率取下沿", "MW 级等效 η_t 0.617 → 0.55（区间下沿）",
+      function () { PRICES.steamEtaCapScale = 0.55 / 0.617; });
+    probe("蒸汽轮机效率取上沿", "MW 级等效 η_t 0.617 → 0.80（水泥窑设计相对内效率口径）",
+      function () { PRICES.steamEtaCapScale = 0.80 / 0.617; });
+    probe("蒸汽边界下移到 250℃", "候选区间 → 250~650℃（按实际工程做法反推）",
+      function () { PRICES.steamBoundC = 250.0; });
+    probe("蒸汽边界上移到 350℃", "候选区间 → 350~650℃（更保守立场）",
+      function () { PRICES.steamBoundC = 350.0; });
+    probe("MW 级发电机效率取上沿", "0.95 → 0.97（工程取值上沿，无实测）",
+      function () { PRICES.genEtaScale = 0.97 / 0.95; });
+    /* 排烟下限（C1 之后成为决策驱动项）：120 / 180 两档（2026-10-09，DSH 要求） */
+    probe("排烟下限取 120℃", "气体载体发电类可用热下限 150 → 120℃（高硫煤/酸露点上限一侧）",
+      function () { PRICES.steamExhaustFloorC = 120.0; });
+    probe("排烟下限取 180℃", "气体载体发电类可用热下限 150 → 180℃（偏保守一侧）",
+      function () { PRICES.steamExhaustFloorC = 180.0; });
+    /* 液体侧下限（B1，2026-10-10）：80℃ 与 25℃ 两档 */
+    probe("液体下限取 25℃", "液体载体发电类可用热下限 40 → 25℃（假设有更冷的水源）",
+      function () { PRICES.liquidFloorC = 25.0; });
+    probe("液体下限取 80℃", "液体载体发电类可用热下限 40 → 80℃（只有温水/回水可用，偏保守）",
+      function () { PRICES.liquidFloorC = 80.0; });
     if (res.keys && (res.keys.indexOf("pcm_storage") >= 0 || res.keys.indexOf("tc_storage") >= 0)) {
       probe("储热改为峰谷套利口径", "售热 → 峰谷套利（替代峰段电加热）",
         function () { PRICES.storageMode = "arbitrage"; });
@@ -2392,12 +2727,25 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
        parasitic 用"百分点"（= 表值% − 交付%）。此前 p50 换成 %、p50Table 仍是 kW/MW，
        界面把 84 与 8.2 相减显示成"寄生损失 75.8 个百分点"。 */
     const p50 = d.effPct * 10.0;
-    const p50Table = row ? row[2] : p50;
+    /* ⚠ 2026-10-09（DSH 复核 ③：界面可见的口径错）：
+       只有 `design === "single"` 时，`p50`（来自一维单压表经规模/寄生修正）与
+       `p50Table`（一维表原始值）才是**同一个模型的修正前后**，此时"表值 − 寄生 = 交付"才成立。
+       非 single 设计下 p50 来自**两级表或二维表**（不同模型！），相减会出现
+       **负的寄生损失**——实测 118℃(two-stage) → −5.23、200℃(cond-aware) → −4.37，
+       而界面 ui.js 会逐字显示"表值 97.9 − 系统寄生损失 −4.37 个百分点 = 交付 14.16%"。
+       处置：① 非 single 时 p50Table/parasitic **置 null**（界面显示"—"）；
+             ② 任何情况下 parasitic 不得为负。 */
+    const isSingle = (d.design === "single");
+    const p50TableRaw = row ? row[2] : null;
+    const p50Table = isSingle ? (p50TableRaw === null ? p50 : p50TableRaw) : null;
+    const parasitic = (isSingle && p50Table !== null)
+      ? Math.max(0, (p50Table - p50) / 10.0) : null;
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
     return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null,
              n: row ? row[4] : null, net, mwh,
-             p50Table: p50Table, parasitic: (p50Table - p50) / 10.0,
+             p50Table: p50Table, parasitic: parasitic,
+             p50TableIsSingle: isSingle,
              effPct: d.effPct, design: d.design,
              designNote: d.note, spanK: d.spanK, tCondC: d.tCondC,
              co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
@@ -2408,11 +2756,24 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
     const row = TABLES.stPct ? pctLookupRow(TABLES.stPct, tb) : null;
     const q = steamRecoveredKw({ "热源温度_degC": tSrc, "载体": medium, "流量_kg_s": mDot, "换热端差_degC": dT });
     const p50Table = steamEffPct(tSrc) * 10.0;
-    const p50 = p50Table - (parasiticPct("steam_pp", tSrc, q * p50Table / 10000.0) || 0.0);
+    /* 2026-10-09：细账拆成三段，界面才能分别报「容量修正」和「寄生损失」：
+         表值 → ×蒸汽轮机容量系数（η_t/0.7891） → 扣泵功与管路压降 = 交付净效率 */
+    const cap0 = Math.max(q * p50Table / 1000.0, 1e-6);   // kW：q[kW] × 效率[kW/MW热]/1000
+    const etaInfo = steamEtaTByCap(cap0);
+    const p50Cap = p50Table * (etaInfo.mid / STEAM_ETA_REF);
+    const netPct = netEffPct("steam_pp", tSrc, q, dT);
+    const p50 = (netPct === null || netPct === undefined) ? p50Cap : netPct * 10.0;
     const net = p50 * q / 1000;
     const mwh = net * hours / 1000;
     return { q, p10: row ? row[1] : null, p50, p90: row ? row[3] : null,
-             n: row ? row[4] : null, net, mwh, p50Table, parasitic: p50Table - p50,
+             n: row ? row[4] : null, net, mwh, p50Table,
+             /* ⚠ 2026-10-09（DSH 复核 P6f）：这两个字段的口径是**百分点**，
+                与 orcDetail 的 parasitic 对齐（orcDetail 里除了 10）。旧版漏除，
+                量级差 10 倍（潜伏：界面当时还没渲染这个字段）。 */
+             etaCorr: (p50Table - p50Cap) / 10.0,
+             parasitic: (p50Cap - p50) / 10.0,
+             etaT: etaInfo.mid, etaInData: etaInfo.inData,
+             etaNote: etaInfo.note,
              co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
   }
 
@@ -2455,11 +2816,14 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
     CHILLER_CLASS_LOW, CHILLER_CLASS_HIGH, CHILLER_APPROACH_K, CHILLER_EVAP_C,
     directEffRange, isGasGasDirect, DIRECT_EFF_PCT, DIRECT_EFF_GAS_GAS_LOW_LOAD,
     generatorEta, GEN_ETA_CURVE, steamEffRangePct, CHILLER_PART_LOAD,
+    steamEtaTByCap, steamEtaFactor, STEAM_ETA_REF,
     expanderMapEta,
     tegEffPct, TEG_CURVE, transportKwhGjFor, dryingTransportKwhGj, DRYING_ELEC_SHARE,
     decisionCertificate, CERT_ASSUMPTIONS,
     orcDetail, steamDetail, heatDetail, pctLookupRow
     , orcRecoveredKw, steamRecoveredKw, qForPath, orcEvapTemp
+    , orcFeasible, ORC_PINCH_MIN_K, orcCondLookup, orcCondBounds
+    , cpOf, isGasCarrier, steamExhaustFloorC, tegRecoveredKw, liquidFloorC
     , ORC_COOLDOWN_K, STEAM_EXHAUST_FLOOR_C, HEAT_MIN_COOLDOWN_K, heatFloor
   };
 })();
@@ -3147,8 +3511,14 @@ function renderTop(res) {
     const d = eng.orcDetail(t, f, medCore, hours, dT);
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
     sub = `ORC **交付净功率** P50 ${num(d.p50, 1)} kW/MW热（设计：${d.designNote || "单压"}；` +
-      `表值 ${num(d.p50Table, 1)} kW/MW热 ${d.design === "two-stage" ? "（两级表已含泵功与厂用电）" :
-        "− 系统寄生损失 " + num(d.parasitic, 2) + " 个百分点 = 交付 " + num(d.effPct, 2) + "%"}）· 实际回收 ${num(d.q, 0)} kW` +
+      /* ⚠ 2026-10-09（DSH 复核 ③）：非"单压"设计时 p50 来自两级表/二维表，
+         与一维表原始值不是同一模型 —— 不能并排相减（会出现负的寄生损失）。 */
+      (d.p50TableIsSingle
+        ? `表值 ${num(d.p50Table, 1)} kW/MW热 − 系统寄生损失 ${num(d.parasitic, 2)} 个百分点 = 交付 ${num(d.effPct, 2)}%`
+        : (d.design === "two-stage"
+          ? `交付值 ${num(d.effPct, 2)}%（两级表已含泵功与厂用电，**不适用"表值−寄生=交付"的拆解**）`
+          : `交付值 ${num(d.effPct, 2)}%（按真实冷源温度的二维表口径，**不适用一维表拆解**）`)) +
+      `）· 实际回收 ${num(d.q, 0)} kW` +
       ` · 口径：按蒸发器出口温度档的中位设计；帕累托理想设计点可达 150.5 kW/MW热（15.1%），` +
       `申报书 11.0~15.1% 指的是后者`;
     /* 设计点对照（P2-9）：当前设计 vs 功率最优设计点 */
@@ -3174,13 +3544,13 @@ function renderTop(res) {
     s1v = num(d.q, 0); s2v = num(d.mwh, 0); co2 = d.co2; money = d.money;
     sub = `蒸汽朗肯净功率 ${num(d.p50, 1)} kW/MW热 · 实际回收 ${num(d.q, 0)} kW` +
       ` · 口径：锅炉出口温度点中位曲线（与内核 steam_eff_median_pct 同口径）`;
-    /* 蒸汽侧效率区间（A1，2026-09-29）：不擅自改点值，但把区间显示出来——
-       实测 30~33 MW 小机等熵效率 61.7~64.2%，水泥窑设计绝对内效率 75~85%，
-       330 MW 大机缸效率 80~88%，口径不统一，故只报区间。 */
-    const sr = eng.steamEffRangePct(t);
+    /* 蒸汽侧效率区间（2026-10-09 改为**容量相关**）：表值 ×(η_t(P)/0.7891) − 寄生损失。
+       实测锚点 30 MW 61.7%、33 MW 64.2%、330 MW 缸效率 80~88%；
+       <30 MW 无等熵实测 → 取 61.7% 保持，区间 55%~80%（详见内核注释）。 */
+    const sr = eng.steamEffRangePct(t, d.q * d.p50Table / 1000.0);
     if (sr) {
       sub += ` · 效率区间 ${num(sr.low, 2)}%~${num(sr.high, 2)}%（主口径 ${num(sr.mid, 2)}%；` +
-        `参考 η_t ${sr.refEtaT}，下沿按小机实测 0.63、上沿按大机 0.88）`;
+        `等效 η_t ${num(sr.etaT, 3)}${sr.inData ? "（实测段）" : "（<30MW 无实测，取最小实测机保持）"}）`;
     }
   } else if (top === "teg") {
     const q = eng.recoveredHeatKw(currentScene());
