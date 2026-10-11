@@ -4032,29 +4032,97 @@ function renderRtFrame(f) {
   }
 }
 
-/* ---------------- 帕累托前沿 ---------------- */
+/* ---------------- 帕累托前沿 ----------------
+   2026-10-11 重写（用户直接反馈"画得草率、凌乱、没有科研感"）。
+   量化根因：**坐标轴从 0 起且不自适应** ⇒ 数据只占画布约 12% 面积（88% 空白），
+   整条前沿被压成角落里的一条小斜带。改法：
+     A. 轴按**数据范围自适应** + 5~8% 边距，刻度取范围内整齐值；
+     B. 四类元素分开视觉通道（见下），不只靠颜色；
+     C. 加**浅虚线网格**；
+     D. 配色克制（主色深蓝 + 中性灰）。
+   参数含义（保持原签名，避免动调用处）—— **2026-10-11 按其真实语义订正**，
+   原注释把 line 与 extra 说反了（DSH 从 `tools.html` 的图例逐条对上后才查清）：
+     points = **代理预测 100 解**（小 + 半透明，靠重叠显密度）
+     line   = **精确核验前沿线**（ORC 图 10 解 / 蒸汽图 8 解；按 x 排序连线）
+     extra  = **CoolProp 复核抽样**（ORC 图 14 解 = `real14`，已剔除 2 个被支配点；碳减排图不传）
+     cur    = 当前工况估算（红点 + 两条虚线投影到两轴）
+   ⚠ 别把 `real14` 读成"14 个实测点"——它是**同一条自研模型链路跑出的帕累托最优解**
+     （见 `calibrationSet()` 的注释），不是实测数据。
+   ⚠ 硬约束：本函数一次只画**一套基准**的数据；不同吸热量档（410 vs 1000 kW）**不得**传进同一次调用。 */
 function svgPareto(el, points, line, extra, xlab, ylab, cur) {
-  const W = 900, H = 430, padL = 66, padB = 46, padT = 18, padR = 20;
+  const W = 900, H = 430, padL = 74, padB = 54, padT = 22, padR = 26;
   const ptsAll = points.concat(line || []).concat(extra || []).concat(cur ? [cur] : []);
-  let xmax = Math.max.apply(null, ptsAll.map((p) => p[0])) * 1.08 || 1;
-  let ymax = Math.max.apply(null, ptsAll.map((p) => p[1])) * 1.08 || 1;
-  const X = (x) => padL + x / xmax * (W - padL - padR);
-  const Y = (y) => H - padB - y / ymax * (H - padB - padT);
-  const eff = (p) => Math.min(1, Math.max(0, (p[2] - 0.09) / 0.07));
-  const col = (p) => eff(p) > 0.66 ? "#E8A33D" : eff(p) > 0.33 ? "#0E9F8A" : "#6FA8DC";
-  let s = `<line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="#C9D6E2"/>` +
-    `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="#C9D6E2"/>`;
-  s += `<text x="${padL + (W - padL - padR) / 2}" y="${H - 8}" text-anchor="middle" font-size="13" fill="#8AA0B4">${xlab}</text>`;
-  s += `<text x="15" y="${padT + (H - padB - padT) / 2}" text-anchor="middle" font-size="13" fill="#8AA0B4" transform="rotate(-90 15 ${padT + (H - padB - padT) / 2})">${ylab}</text>`;
-  for (let k = 0; k <= 4; k++) {
-    const t = k / 4;
-    s += `<text x="${X(t * xmax)}" y="${H - padB + 20}" text-anchor="middle" font-size="11" fill="#8AA0B4">${Math.round(t * xmax)}</text>` +
-      `<text x="${padL - 8}" y="${Y(t * ymax) + 4}" text-anchor="end" font-size="11" fill="#8AA0B4">${Math.round(t * ymax)}</text>`;
+  if (!ptsAll.length) { el.innerHTML = ""; return; }
+
+  /* A. 轴自适应：取数据范围 + 8% 边距，再取「整齐」的刻度端点 */
+  function nice(lo, hi) {
+    if (!(hi > lo)) { const m = Math.abs(hi) || 1; return [hi - m * 0.1, hi + m * 0.1]; }
+    const pad = (hi - lo) * 0.08;
+    lo -= pad; hi += pad;
+    const raw = (hi - lo) / 5;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((k) => k * mag).filter((v) => v >= raw)[0] || mag * 10;
+    return [Math.floor(lo / step) * step, Math.ceil(hi / step) * step, step];
   }
-  if (line) s += `<polyline points="${line.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="#0E9F8A" stroke-width="3.2"/>`;
-  points.forEach((p) => { s += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="3.4" fill="${col(p)}" opacity="0.8"/>`; });
-  (extra || []).forEach((p) => { s += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="4.8" fill="#3D6FB4" stroke="#fff" stroke-width="1.2"/>`; });
-  if (cur) s += `<circle cx="${X(cur[0]).toFixed(1)}" cy="${Y(cur[1]).toFixed(1)}" r="7" fill="#E05252" stroke="#fff" stroke-width="2"/>`;
+  const xr = nice(Math.min.apply(null, ptsAll.map((p) => p[0])), Math.max.apply(null, ptsAll.map((p) => p[0])));
+  const yr = nice(Math.min.apply(null, ptsAll.map((p) => p[1])), Math.max.apply(null, ptsAll.map((p) => p[1])));
+  const X = (x) => padL + (x - xr[0]) / (xr[1] - xr[0]) * (W - padL - padR);
+  const Y = (y) => H - padB - (y - yr[0]) / (yr[1] - yr[0]) * (H - padB - padT);
+  const nf = (v, st) => (st < 1 ? v.toFixed(1) : String(Math.round(v)));
+
+  let s = "";
+  /* C. 浅虚线网格 */
+  for (let x = xr[0]; x <= xr[1] + 1e-9; x += xr[2]) {
+    s += `<line x1="${X(x).toFixed(1)}" y1="${padT}" x2="${X(x).toFixed(1)}" y2="${H - padB}" stroke="#e5e7eb" stroke-dasharray="2 3"/>`;
+  }
+  for (let y = yr[0]; y <= yr[1] + 1e-9; y += yr[2]) {
+    s += `<line x1="${padL}" y1="${Y(y).toFixed(1)}" x2="${W - padR}" y2="${Y(y).toFixed(1)}" stroke="#e5e7eb" stroke-dasharray="2 3"/>`;
+  }
+  /* 轴 */
+  s += `<line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="#94A3B8"/>` +
+       `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="#94A3B8"/>`;
+  s += `<text x="${padL + (W - padL - padR) / 2}" y="${H - 12}" text-anchor="middle" font-size="13" fill="#475569">${xlab}</text>`;
+  s += `<text x="16" y="${padT + (H - padB - padT) / 2}" text-anchor="middle" font-size="13" fill="#475569" transform="rotate(-90 16 ${padT + (H - padB - padT) / 2})">${ylab}</text>`;
+  for (let x = xr[0]; x <= xr[1] + 1e-9; x += xr[2]) {
+    s += `<text x="${X(x).toFixed(1)}" y="${H - padB + 18}" text-anchor="middle" font-size="12" fill="#64748B">${nf(x, xr[2])}</text>`;
+  }
+  for (let y = yr[0]; y <= yr[1] + 1e-9; y += yr[2]) {
+    s += `<text x="${padL - 8}" y="${(Y(y) + 4).toFixed(1)}" text-anchor="end" font-size="12" fill="#64748B">${nf(y, yr[2])}</text>`;
+  }
+
+  /* 当前工况的虚线投影（画在最底层，避免压住数据点） */
+  if (cur) {
+    s += `<line x1="${X(cur[0]).toFixed(1)}" y1="${Y(cur[1]).toFixed(1)}" x2="${X(cur[0]).toFixed(1)}" y2="${H - padB}" stroke="#E05252" stroke-dasharray="4 3" stroke-width="1.2" opacity="0.75"/>` +
+         `<line x1="${padL}" y1="${Y(cur[1]).toFixed(1)}" x2="${X(cur[0]).toFixed(1)}" y2="${Y(cur[1]).toFixed(1)}" stroke="#E05252" stroke-dasharray="4 3" stroke-width="1.2" opacity="0.75"/>`;
+  }
+  /* points：代理预测大样本 —— 小 + 半透明，重叠处自然显密度 */
+  points.forEach((p) => {
+    s += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="2.6" fill="#7FA8D4" opacity="0.38"/>`;
+  });
+  /* line：拟合前沿线（按 x 排序，避免连线来回折） */
+  if (line && line.length > 1) {
+    const sorted = line.slice().sort((a, b) => a[0] - b[0]);
+    s += `<polyline points="${sorted.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="#0E7490" stroke-width="2.2" opacity="0.9"/>`;
+  }
+  /* extra：精确核验解 —— 最醒目 */
+  (extra || []).forEach((p) => {
+    s += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="4.6" fill="#1F5FA8" stroke="#fff" stroke-width="1.4"/>`;
+  });
+  /* 最优点：星标 + 就近把坐标写在图里（不再依赖图例） */
+  const exact = (extra && extra.length) ? extra : (line && line.length ? line : points);
+  let best = exact[0];
+  exact.forEach((p) => { if (p[1] > best[1]) best = p; });
+  const bx = X(best[0]), by = Y(best[1]);
+  const star = [];
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 ? 3.2 : 7.6, ang = -Math.PI / 2 + i * Math.PI / 5;
+    star.push(`${(bx + rr * Math.cos(ang)).toFixed(1)},${(by + rr * Math.sin(ang)).toFixed(1)}`);
+  }
+  s += `<polygon points="${star.join(" ")}" fill="#C8A04A" stroke="#fff" stroke-width="1"/>`;
+  const lx = Math.min(bx + 10, W - padR - 120), ly = Math.max(by - 10, padT + 12);
+  s += `<text x="${lx}" y="${ly}" font-size="12" fill="#1F2937">最优点 ${best[0].toFixed(0)}, ${best[1].toFixed(1)}</text>`;
+  /* cur：红点 */
+  if (cur) s += `<circle cx="${X(cur[0]).toFixed(1)}" cy="${Y(cur[1]).toFixed(1)}" r="6.4" fill="#E05252" stroke="#fff" stroke-width="1.8"/>`;
   el.innerHTML = s;
 }
 
