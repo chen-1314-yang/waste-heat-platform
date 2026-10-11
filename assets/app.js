@@ -1118,7 +1118,16 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
      ⚠ DSH 的实现要求：**只改 TEG 的可用热，不要全局动 heatFloor** ——
        heatFloor 还被其它路径当 qDefault 用，全局改会波及一片。
      ⚠ 影响预判（DSH 实测给出）：275℃/10 kg/s 烟气/端差 10 → TEG 可用热 2475 → ≈1265 kW，
-       净功率 123.8 → ≈63 kW（与 ORC 42.3 kW 同量级）；TEG 的获胜温区收窄到约 215~280℃。 */
+       净功率 123.8 → ≈63 kW（与 ORC 42.3 kW 同量级）。
+
+     ⚠ **2026-10-11 更正（本条原先写错，并且已经误导过我一次）**：
+     原写「TEG 的获胜温区收窄到约 215~280℃」**不成立**。独立实测扫描：
+       · **烟气 150~400℃ × 流量 1~200 kg/s：TEG 一次未胜**；
+       · 热水：仅在「ORC 不可行」的 100℃（各流量）与三个零散点（260℃/1、275℃/1、275℃/50 kg/s）胜出。
+     ⇒ 正确表述：**TEG 只在 ORC 不可行或极弱的温区胜出**，不是某个温度带。
+     上面那两个数（2475→1265 kW、123.8→63 kW）只是**该项可用热/净功率的修正**，
+     **不能**当作"TEG 会赢"的证据。
+     纪律（守则 §13 第 14 条）：**注释里的行为性断言必须附可复跑探针或数字**。 */
   function tegRecoveredKw(scene) {
     const m = Number(scene["流量_kg_s"]);
     if (!m) { const q = Number(scene["规模_kW"]); return q || 0; }
@@ -2511,13 +2520,18 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       const tDry = s["需求温度_degC"] || 100.0;
       const lo = Math.max(60.0, tDry + dT);
       const margin = t - lo;
-      /* 气-气直换的低负荷带宽（2026-09-29 T-3）：实测同设备 ε 在负荷率 45% 时
-         相对满负荷降 9.8%；间歇运行意味着长期处于低负荷段，故点名提示。 */
+      /* 气-气直换的低负荷带宽（2026-09-29 T-3；**依据 2026-10-11 更正**）：
+         依据＝**三维热管 ε 相对衰减 0.813**（迎面风速 1.0→3.0 m/s，六排管，
+         Buildings 2024, 14(2):355，开放获取），即 73.2% ＝ 90 × 0.813。
+         ⚠ 旧文案引的「负荷率 45% 相对满负荷降 9.8%」出自梅山钢铁 0.814→0.734，
+         该出处**查无、已弃用**（问题台账 L-12）——数字换了、这句话漏改，此处一并更正。
+         间歇运行意味着长期处于低负荷段，故点名提示。 */
       if (keys.direct && isGasGasDirect(s)) {
         const r = directEffRange(s);
         notes.push("ℹ 能效口径提示（气-气直换）：本模型名义取 " + r.mid.toFixed(0) +
-          "%（口径＝回收热 ÷ 可回收热，不是换热器效能 ε）。实测同设备 ε 在负荷率 45% 时" +
-          "相对满负荷降 9.8%，故低负荷段建议按 " + r.low.toFixed(0) + "% 复核" +
+          "%（口径＝回收热 ÷ 可回收热，不是换热器效能 ε）。实测同设备 ε 相对满负荷衰减 " +
+          "0.813（三维热管 0.75→0.61，迎面风速 1.0→3.0 m/s），故低负荷段建议按 " +
+          r.low.toFixed(0) + "% 复核" +
           (r.lowLoad ? "；本场景标为**间歇**运行，属于低负荷高发情形，建议优先按 " + r.low.toFixed(0) + "% 定容。" : "。") +
     "（ε 实测点：三维热管 0.75→0.61（Buildings 2024,14(2):355，原文已核）；" +
     "原用的梅山钢铁 0.814→0.734 已弃用——出处查无，见问题台账 L-12）");
@@ -2794,7 +2808,7 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
     PATH_KEYS, DISPLAY, INDICATORS, DIRECTIONS, CP, BASE_INDICATORS,
     ABS_COOL_T_MIN, COP_C_ABS, COP_E_COOL, GRID_EF, ELEC_PRICE, HP_COP,
     COP_I_ABS_SELF, COP_II_ABS_SELF, COP_H_ABS_EXT,
-    setPrices, elecPrice, heatingHoursCap, heatPrice, HEATING_SEASON_HOURS, GAS_PRICE,
+    setPrices, elecPrice, heatingHoursCap, heatPrice, HEATING_SEASON_HOURS, DEFAULT_RUN_HOURS, GAS_PRICE,
     valleyElec, peakValley, storageRevenueMode, storageChargeMode, storageHoursOf,
     storageReduction, ELEC_HEAT_ETA, NO_PAYBACK_YEARS,
     HP_ETA_CARNOT, HP_APPROACH_K, compCopFor, compSupplyTemp,
