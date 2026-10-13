@@ -1707,10 +1707,14 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
   function steamEffRangePct(tSrc, capKw) {
     const e = steamEffPct(tSrc);
     if (e === null || e === undefined) return null;
-    const band = steamEtaTByCap(capKw === undefined || capKw === null ? 1000.0 : capKw);
-    return { mid: e * (band.mid / STEAM_ETA_REF),
-             low: e * (band.low / STEAM_ETA_REF),
-             high: e * (band.high / STEAM_ETA_REF),
+    /* ⚠ 2026-10-13（P0-1 配套）：区间必须与主值**同口径** —— 主值（netEffPct）已补乘
+       generatorEta，这里若不同步乘，就会出现"区间与点值不是一个东西"。 */
+    const cap = (capKw === undefined || capKw === null) ? 1000.0 : capKw;
+    const band = steamEtaTByCap(cap);
+    const g = generatorEta(cap);
+    return { mid: e * (band.mid / STEAM_ETA_REF) * g,
+             low: e * (band.low / STEAM_ETA_REF) * g,
+             high: e * (band.high / STEAM_ETA_REF) * g,
              refEtaT: STEAM_ETA_REF, etaT: band.mid, inData: band.inData, note: band.note };
   }
 
@@ -1736,7 +1740,20 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
       tDesign = clamp(Number(tSrc) - 100.0, 180.0, 540.0);
       /* 2026-10-09：先把"固定 eta_t=0.7891"换成容量相关的蒸汽轮机等熵效率曲线，
          再扣寄生损失（顺序：修正透平 → 扣泵与压降；两者证据来源不同，不重复扣） */
-      e0 = e0 * steamEtaFactor(Math.max(Number(qKw) * e0 / 100.0, 1e-6));
+      const capSteam = Math.max(Number(qKw) * e0 / 100.0, 1e-6);
+      e0 = e0 * steamEtaFactor(capSteam);
+      /* ⚠ 2026-10-13（P0-1，复核方拍板"改"）：这里**原来漏了发电机+机械效率**。
+         为什么必须补：
+           ① 与 ORC 不对称 —— ORC 三处（settle 见 orcNetEffByEvap）都乘了，且自己标了
+              `generatorEtaIncluded: true`；蒸汽链路 6 个函数**一次都没调用** generatorEta。
+           ② **与本文件登记的口径不一致** —— 《口径字典》写的蒸汽侧定义是
+              "**蒸汽朗肯净电 ÷ 回收热**"，而"净电"＝发电机端；不乘就是不扣发电机损失。
+           ③ 不会重复扣 —— 蒸汽表来自 CoolProp 朗肯扫描（net = W_exp − W_pump，**纯循环净功**），
+              容量系数来自 DCS **等熵**口径（也是透平侧）⇒ 表里没有折叠发电机效率。
+         口径：**与 ORC 同规矩** —— 规模/发电机/寄生三层共用**同一个从表值出发的 capSteam**，
+              再 `e0×容量系数×genEta − 寄生`；寄生那一步用的功率由下面共用的 cap0 重算（= 修正后功率）。
+         量级：MW 级 −5.0~5.3%；0.06 MW 档（genEta 0.8853）−12~13%。 */
+      e0 = e0 * generatorEta(capSteam);
     } else return null;
     if (e0 === null || e0 === undefined) return null;
     if (!P || !P.hasTable(kind)) return e0;
@@ -2569,7 +2586,9 @@ chillerClass 缩放电制冷基准 COP（1.0 = 常规离心机 4.82，
 
      诚实性：扰动用的是**假设区间**，不是"随机数"；区间来源写在 detail 里。
      翻转率是"在我们自己这个模型下的结论稳定性"，不等于"现实中一定如此"。 */
-  /* 假设清单（2026-10-11 扩到 15 条，P-4c）。
+  /* 假设清单（2026-10-11 扩到 16 条，P-4c）。
+     ⚠ 2026-10-12 订正：原注释写"扩到 15 条"，而**下面这个数组实际是 16 条**（数给它自己看即可）；
+        台账与材料都按 **16 条**登记（6 条原假设 ＋ 10 条新增）。**注释与数组不一致本身就是一处"对不上"。**
      为什么扩：探针实测发现**证书的「假设」面板与「扰动」面板原先是两套东西** ——
      有 12 条扰动没有对应的假设条目（其中 9 条是"工程取值/边界"级参数，有依据、有等级、多数真生效）。
      评委对着界面问"你扰动的这条，登记在哪条假设下"，原版答不上来。这是**口径不一致**，不是小瑕疵。
@@ -2866,6 +2885,11 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
     const cap0 = Math.max(q * p50Table / 1000.0, 1e-6);   // kW：q[kW] × 效率[kW/MW热]/1000
     const etaInfo = steamEtaTByCap(cap0);
     const p50Cap = p50Table * (etaInfo.mid / STEAM_ETA_REF);
+    /* ⚠ 2026-10-13（P0-1 配套）：细账由**两段**改**三段** ——
+       表值 → ×容量系数 → **×发电机+机械效率** → 扣寄生 = 交付。
+       改后"三段之和 = 总损失"恒成立，界面上能分别看到每层扣了多少。 */
+    const genEtaVal = generatorEta(cap0);
+    const p50Gen = p50Cap * genEtaVal;
     const netPct = netEffPct("steam_pp", tSrc, q, dT);
     const p50 = (netPct === null || netPct === undefined) ? p50Cap : netPct * 10.0;
     const net = p50 * q / 1000;
@@ -2876,7 +2900,9 @@ probe("电制冷按老旧机（−15%）", "基准 COP 4.82 → 4.10（污垢/�
                 与 orcDetail 的 parasitic 对齐（orcDetail 里除了 10）。旧版漏除，
                 量级差 10 倍（潜伏：界面当时还没渲染这个字段）。 */
              etaCorr: (p50Table - p50Cap) / 10.0,
-             parasitic: (p50Cap - p50) / 10.0,
+            genEta: genEtaVal,
+            genCorr: (p50Cap - p50Gen) / 10.0,
+            parasitic: (p50Gen - p50) / 10.0,
              etaT: etaInfo.mid, etaInData: etaInfo.inData,
              etaNote: etaInfo.note,
              co2: mwh * GRID_EF, money: mwh * 1000 * elecPrice() / 10000 };
