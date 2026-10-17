@@ -1,0 +1,474 @@
+/* style.css —— 对话式界面（N3 改版：2026-10-12；R1 只做减法：2026-10-13）。
+ *
+ * 用户意见原文：「我想要的就是类似于 DeepSeek 的那种网页版的聊天干净整洁……
+ * 我看你那个 UI 的色调整体上是以蓝色为主的，我感觉你做的那种 UI 边边框框就很多，
+ * 看着不舒适，不够足够的整洁。」
+ * 第二轮意见（R1 这一轮的原话）：「我感觉现在的 UI 没有很清爽」。
+ *
+ * ── N3 那一版改了什么（对着上面那句话逐条改）──────────────────────────────────
+ *   ① **配色**：从「深蓝底 + 蓝/金/红三色点缀」改成**浅底、低饱和、单一色相**。
+ *      强调色**只保留项目识别色青绿 #0E9F8A**（用户明确要求别去掉），
+ *      外加一个中性灰（#6B7280）与一个"需要注意"的暗红（#B4432F，仅用于错误态）。
+ *      不再有渐变品牌字、不再有蓝色光晕背景。深色底 --bg:#0B1220 等旧 token **保留在
+ *      下面的"项目原始 token"注释块里**（线上站点仍在用它们，这里只是不在本页用）。
+ *   ② **边框**：能靠留白/分隔线区分的就**不画框**。原来一屏有 8~10 处"四边闭合的矩形"
+ *      （卡片、步骤条、场景卡、闸门小结、折叠块、表格外框、片段卡、离线条……）。
+ *      现在**初始加载后可见的四边框只剩 1 处**：输入框（主按钮 border-color 是 transparent，不计）。
+ *      （判据与实测见 ui_check.mjs 第 ⑧ 节；`--line` 现在只用在**单边**分隔线上。）
+ *   ③ **气泡**：助手气泡从"深色卡片 + 1px 边框"改成**几乎不可见的浅底**，
+ *      只靠留白和圆角把话说清楚 —— 像聊天软件，不像仪表盘。
+ *   ④ **字体与间距**：正文 line-height 统一 1.85；.msg 的间距、区块间距用同一套变量。
+ *   ⑤ **保留**：立场条文案（「AI 只做入口，数字全来自引擎」）、左侧「你可以这样问」与
+ *      「知识库」两张卡、对话里的计算过程步骤区。
+ *
+ * ── R1 只做减法（2026-10-13）—— 这一轮**没有**加任何功能/动效/面板/字段 ──────────
+ *   A. **取值收口**（用户第⑤条怀疑："数一数有几种不同的值，种类越多越不整"）：
+ *      font-size 7→4 / line-height 7→4 / padding 20→14 / margin 11→8 / gap 11→9。
+ *      做法不是"把所有数字改小"，而是把散落的魔法数字归到 3 档 token
+ *      （--fs-lead / --lh-inline / --lh-tight / --lh-small / --pad-chip），页面观感不变。
+ *      实测数见 `node _ui_audit.mjs` 的"取值种数"一节（改前/改后都打印）。
+ *   B. **删掉的块**（每一块都先回答了"删了用户会失去什么"，答不上来的才删）：
+ *      .tagline 副标题、.composer-foot 的会话计数与"数字来自引擎"那行、mode="llm" 的来源徽标
+ *      （它与紧邻的 .gate 一行说的是同一件事）、#kb-list 的每源明细与裸路径行（折进 details）。
+ *   C. **压掉的文案**：立场条小字 3 行→2 行、页脚 2 行→1 行、明细折叠的 4 个 summary 标题
+ *      （"哪个假设敏感 · 调多少会翻 · 翻成什么（29 项/1 项）"这类把正文里已有的数字再念一遍的）。
+ *      被砍掉的**细节文本一字未新写**，整句搬进「出处」折叠块脚注（app.js:CITE_FOOTNOTE）。
+ *   D. **顶栏三个状态 pill → 一个**：全绿时只显示一个字标；出错时三个实况值随降级条一起显形。
+ *
+ * ⚠ 有几条规则是**别的自检脚本按字面依赖**的，改动前先看注释里的"⚠ 判据依赖"：
+ *   · `.msg` 必须显式 width:100%（css_geometry.mjs 要按盒模型复算左右边缘）
+ *   · `.msg.me` 不许叠 flex-direction:row-reverse
+ *   · `.layout` 仍是「侧栏 + 对话区」两栏，`--gap:14px`
+ *   · `.card` / `details.det` / `.msg` / `.msg.me` 的规则**字面**被
+ *     ui_render_check.mjs 的反向变异锚点引用（MSG_ORIG / ME_ORIG / .card 替换串）——
+ *     改这几行要同步改那边的常量，否则那两条断言会以"锚点失配"的形式失败（这是刻意的）。
+ */
+
+:root{
+  /* ── 项目原始 token（线上站点 src/styles/tokens.css 仍在用；本页只留档，不用）──
+     --accent:#0E9F8A   --blue:#3D6FB4   --gold:#E8A33D   --red:#E05252
+     --bg:#0B1220       --card:#121C30   --line:#22304C   --ink:#E6EEF9
+     ⚠ ui_check.mjs 仍会断言这两条**保留在文件里**（它们是项目识别色，用户明确不许去掉）：
+       --accent:#0E9F8A 与 --bg:#0B1220
+     ────────────────────────────────────────────────────────────────── */
+  --accent:#0E9F8A;          /* 🔴 唯一强调色：项目识别青绿 */
+  --accent-2:#0B8171;        /* 青绿的深一档（hover / 正文里的强调字） */
+  --accent-soft:#ECF7F5;     /* 青绿的最浅底（用户气泡、选中态） */
+  --accent-line:#BFE3DD;     /* 青绿的低饱和描边 */
+  --bg:#0B1220;              /* ⚠ 只作"项目原始 token"留档，本页渲染不用它 */
+  --page:#FFFFFF;            /* 页面底：纯白（DeepSeek 那种干净感） */
+  --bg-2:#F7F8F8;            /* 次级底：步骤区、代码块 */
+  --card:#FAFAFA;
+  --line:#E7E9EC;            /* ⚠ 只用于**单边**分隔线，不再画四边框 */
+  --line-2:#DCDFE3;
+  --ink:#1A1A1A;
+  --muted:#5C6370;
+  --soft:#8A9099;
+  --blue:#0E9F8A;            /* 兼容别名：老代码里引用 var(--blue) 的地方一律归到强调色 */
+  --blue-soft:var(--accent-soft);
+  --gold:#B4432F;            /* "需要注意"态：暗红（不再用金色，少一个色相） */
+  --red:#B4432F;
+  --radius:12px;
+  --gap:14px;
+  /* 间距/字体统一到这一套，别再各处写魔法数字 */
+  --fs-body:14.5px;
+  --fs-small:13px;
+  --fs-xs:12px;
+  /* ⚠ R1（2026-10-13 只做减法这一轮）：下面 4 个 token 是**为收口"取值种数"新增的** ——
+     不是新功能，是把散在十几处的魔法数字归并成 3 档。
+     口径见 `_ui_audit.mjs` 的"取值种数"一节与 README「R1 取值收口」。
+     改这一轮之前：font-size 7 种 / line-height 7 种 / padding 20 种 / margin 11 种 / gap 11 种。
+     目标：每一档都落到有限的 token 上，页面观感不变而"整"起来。 */
+  --fs-lead:11px;            /* 比正文小一档的极小字（原 10px / 10.5px / 11px 三处） */
+  --lh-inline:1.5;           /* 单行内的行高：图标、输入框、单行标签 */
+  --lh-tight:1.7;            /* 小字块的行高：提示块、出处、片段 */
+  --lh-small:1.8;            /* 11~12px 说明文的行高（立场条小字、chip 行） */
+  --lh-body:1.85;            /* 正文行高（也是 .md 的唯一行高） */
+  --pad-chip:5px 8px;        /* 行内小胶囊/小按钮的上下留白 */
+  --pad-block:10px;
+  --font-cn:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+  --mono:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;
+  --topbar-h:52px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:var(--page);
+  color:var(--ink);
+  font-family:var(--font-cn);
+  font-size:var(--fs-body);line-height:var(--lh-body);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;                 /* 滚动交给 .chat，输入框才能"固定在底部" */
+  /* 🔴 R4（2026-10-13）：外壳改成**弹性列**，由 flex 自己分配高度。
+     原先靠 `.layout{height:calc(100vh - var(--topbar-h) - 130px)}` 里的那个 130
+     把「立场条 38 + 页脚 38 + 间距」一次性预留死 —— 实测外壳合计 147px，
+     与 130 对不上 ⇒ 底部要么留缝、要么溢出，且立场条/页脚一变高就更不准。
+     现在：topbar / stance-wrap / footer 按内容取高（flex-shrink:0），
+     `.layout` 吃掉剩下的全部（flex:1 + min-height:0），**没有任何固定预留**。 */
+  display:flex;flex-direction:column;
+}
+/* 外壳三段：只按内容取高，不参与伸缩（顶栏本来就 sticky，这里显式钉住不许被压扁） */
+.topbar,.stance-wrap,footer{flex:0 0 auto}
+a{color:var(--accent-2);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.92em;background:var(--bg-2);padding:1px 5px;border-radius:5px}
+.spacer{margin-left:auto}
+
+/* ---------------- 顶栏（一条分隔线，不画框） ---------------- */
+.topbar{
+  position:sticky;top:0;z-index:30;height:var(--topbar-h);
+  display:flex;gap:6px 12px;align-items:center;padding:0 22px;
+  background:var(--page);
+  border-bottom:1px solid var(--line);      /* ⚠ 单边，不计入"边框数" */
+}
+.brand{font-size:15.5px;font-weight:700;letter-spacing:.1px;white-space:nowrap;color:var(--ink)}
+/* 状态pill：从"描边胶囊"改成**纯文字 + 一个小圆点**（少 3 个框）
+   ⚠ R1 减法：顶栏全绿时只剩 #pill-status 一个字标；#pill-engine / #pill-llm / #pill-kb
+     退进 #pill-detail（默认 hidden），只在出错时被 renderHealth() 显形。 */
+.pill{font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+#pill-detail{display:inline-flex;align-items:center;gap:12px}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--soft);flex:0 0 auto}
+.pill.on::before{background:var(--accent)}
+.pill.off::before{background:var(--red)}
+.pill.warn::before{background:var(--gold)}
+
+/* ---------------- 立场条：一行字，不加框 ---------------- */
+.stance-wrap{padding:14px 22px 0;max-width:1680px;margin:0 auto}
+.stance{display:flex;gap:9px;align-items:flex-start;padding:0 0 12px;border-bottom:1px solid var(--line)}
+.stance .big{font-size:var(--fs-small);font-weight:600;color:var(--accent-2)}
+.stance .sub{font-size:var(--fs-xs);color:var(--soft);margin-top:2px;line-height:var(--lh-small)}
+.stance .icon{font-size:var(--fs-small);line-height:var(--lh-inline);opacity:.75}
+
+.degrade{
+  display:none;gap:10px;align-items:center;flex-wrap:wrap;
+  padding:10px 0;margin-top:2px;font-size:var(--fs-small);color:var(--gold);
+  border-bottom:1px solid var(--line);
+}
+.degrade.show{display:flex}
+
+/* ---------------- 两栏布局 ----------------
+   🔴 R4（2026-10-13）：高度从 `calc(100vh - var(--topbar-h) - 130px)` 改成弹性。
+   那个 130px 是**魔法数**：它把立场条 38px + 页脚 38px + 间距一次写死，
+   而实测外壳合计 147px ⇒ 两者对不上，底部要么留空隙、要么溢出，且完全不自适应
+   （立场条的小字换行、页脚隐藏、降级条出现，都会让这个数再变一次）。
+   现在 `.layout` 是 body 这个 flex 列里唯一 flex:1 的孩子：
+     高度 = 视口高 − topbar − stance-wrap − footer 的**实际**高度，由布局引擎算，不由我们猜。
+   ⚠ min-height:0 不能省：grid/flex 子项默认 min-height:auto 会顶破父容器，
+     省掉它滚动区就又会溢出（这正是原来那个魔法数想掩盖的症状）。 */
+.layout{
+  display:grid;grid-template-columns:270px minmax(0,1fr);
+  gap:var(--gap);padding:var(--gap) 16px 0;
+  flex:1 1 auto;min-height:0;
+  max-width:1680px;margin:0 auto;
+  width:100%;
+}
+@media (max-width:1180px){
+  .layout{grid-template-columns:250px minmax(0,1fr)}
+}
+@media (max-width:820px){
+  .layout{grid-template-columns:1fr}
+  .side{display:none}
+}
+.side{overflow-y:auto;padding-right:2px}
+
+/* ---------------- 侧栏：不要卡片框，只要标题 + 留白 ----------------
+   ⚠ 用户明确要**保留**这两张卡（「你可以这样问」与「知识库」）——
+     保留的是**内容与分区**，不是那个 1px 的矩形框。 */
+.card{padding:0 0 20px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.card:last-child{border-bottom:none}
+.card h3{font-size:var(--fs-small);font-weight:700;margin:0 0 var(--pad-block);display:flex;align-items:center;gap:7px;color:var(--ink)}
+/* 原来的"渐变小方块"编号 → 一个淡淡的序号，不占视觉重量 */
+.card h3 .no{color:var(--soft);font-size:var(--fs-xs);font-weight:700;min-width:13px}
+.muted{color:var(--muted)}.soft{color:var(--soft)}
+.small{font-size:var(--fs-small)}.xsmall{font-size:var(--fs-xs);line-height:var(--lh-tight)}
+.ok{color:var(--accent-2);font-weight:600}.no{color:var(--red);font-weight:600}.flip{color:var(--gold);font-weight:600}
+/* R1：#kb-list 里的「知识库明细与引用纪律」折叠块 —— 它是侧栏里的 details，
+   与对话里的 details.det 同款（只有上分隔线），这里只补一个更紧的上间距。 */
+.kb-det{margin-top:6px}
+.kb-det>summary{padding:2px 0}
+
+/* ---------------- 按钮 / 输入 ---------------- */
+.btn{
+  padding:8px 16px;border-radius:10px;cursor:pointer;border:1px solid transparent;
+  background:var(--accent);color:#fff;
+  font-family:inherit;font-size:var(--fs-small);font-weight:600;white-space:nowrap;
+  transition:background .13s ease,opacity .13s ease;
+}
+.btn:hover{background:var(--accent-2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+/* ghost 按钮：**不描边**，只靠浅底区分（少一圈框） */
+.btn.ghost{background:var(--bg-2);color:var(--muted);border-color:transparent}
+.btn.ghost:hover{background:#EFEFEF;color:var(--ink);text-decoration:none}
+.btn.small{padding:var(--pad-chip);font-size:var(--fs-xs)}
+
+textarea,input[type=text],input[type=number],select{
+  width:100%;padding:8px 12px;border-radius:10px;
+  border:1px solid var(--line-2);background:var(--page);color:var(--ink);
+  font-family:inherit;font-size:var(--fs-small);line-height:var(--lh-inline);
+}
+textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
+.field{margin-bottom:9px}
+.field label{display:block;font-size:var(--fs-xs);color:var(--muted);margin-bottom:4px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+@media (max-width:760px){.grid3{grid-template-columns:1fr}}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+.chips{display:flex;gap:var(--pad-block);flex-wrap:wrap}
+.chips.col{flex-direction:column}
+/* 侧栏的示例问句：**不要框**，做成可点的一行文字（hover 才显底） */
+.chip{
+  padding:var(--pad-chip);border-radius:8px;cursor:pointer;font-size:var(--fs-xs);font-weight:400;text-align:left;
+  border:none;background:transparent;color:var(--muted);line-height:var(--lh-small);
+  font-family:inherit;transition:background .13s ease,color .13s ease;
+}
+.chip:hover{background:var(--bg-2);color:var(--ink)}
+.chip.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
+
+/* ---------------- 对话区 ---------------- */
+.chatpane{display:flex;flex-direction:column;min-height:0;min-width:0}
+.chat{
+  flex:1 1 auto;min-height:0;overflow-y:auto;padding:2px 4px 12px;
+  scroll-behavior:smooth;
+}
+.chat::-webkit-scrollbar,.side::-webkit-scrollbar{width:8px}
+.chat::-webkit-scrollbar-thumb,.side::-webkit-scrollbar-thumb{background:#D8DBDF;border-radius:4px}
+
+/* 气泡：用户右、助手左
+   ⚠ 判据依赖（ui_check ⑥ / css_geometry.mjs ④）：width:100% 与 align-self:stretch
+     必须**显式**写着，不许退回"块级盒自动撑满"那条隐式规则；
+     .msg.me 也不许再叠 flex-direction:row-reverse（与 justify-content:flex-end 矛盾）。 */
+.msg{display:flex;gap:10px;margin-bottom:22px;animation:fade .22s ease both;
+  width:100%;align-self:stretch;min-width:0}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.msg.ai{justify-content:flex-start;flex-direction:row}
+.msg.me{justify-content:flex-end;flex-direction:row}
+/* 头像：去掉了渐变方块，改成一个小圆形字标（更安静） */
+.msg .avatar{
+  width:28px;height:28px;flex:0 0 auto;border-radius:50%;font-size:var(--fs-lead);font-weight:700;
+  display:flex;align-items:center;justify-content:center;color:#fff;margin-top:2px;
+  background:var(--accent);
+}
+.msg.me .avatar{display:none}
+.msg .body{max-width:min(860px,86%);min-width:0;display:flex;flex-direction:column;gap:7px}
+.msg.me .body{align-items:flex-end;text-align:right}
+.msg .bubble{
+  padding:2px 0;border-radius:var(--radius);font-size:var(--fs-body);line-height:var(--lh-body);
+  background:transparent;border:none;color:var(--ink);
+  word-break:break-word;
+}
+/* 用户气泡保持浅色底（要能和助手正文一眼分开）；助手正文**完全不着色**，就是白底黑字 */
+.msg.me .bubble{
+  padding:9px 14px;background:var(--accent-soft);color:var(--ink);
+  border-radius:14px;border-top-right-radius:5px;
+}
+.msg .meta{font-size:var(--fs-xs);color:var(--soft)}
+
+/* 回答归属：从"描边胶囊"改成一行灰色小字 */
+.badge{
+  display:block;margin-top:10px;padding:0;border:none;background:none;
+  font-size:var(--fs-xs);color:var(--soft);
+}
+.badge.ok{color:var(--soft)}
+
+/* ---------------- G1：缺参数引导的「先验猜测」提示条 ----------------
+ * 🔴 它**必须在屏幕上看得见**，不许藏在折叠区里（任务书 G4 的硬要求）：
+ *    用户要一眼看出"上面那些 300~400℃ / 60 kg/s 只是先验猜测，还没进引擎"。
+ * ⚠ 仍然守 N3 的边框预算：这里只画**左边一条分隔线**，不画四边框。 */
+.guide-prior{
+  margin:var(--pad-block) 0 0;padding:7px 0 7px 12px;
+  border-left:2px solid var(--accent);background:var(--accent-soft);
+  font-size:var(--fs-xs);color:var(--ink);line-height:var(--lh-tight);
+}
+.guide-prior b{color:var(--accent-2)}
+
+/* ---------------- 计算过程（步骤逐条出现） ----------------
+   ⚠ 「对话里的计算过程」是用户明确要保留的；这一版只把它**变轻**：
+     去掉每条步骤的框，改成"小圆点 + 灰字"的一行行。 */
+.steps{display:flex;flex-direction:column;gap:2px}
+.steps:empty{display:none}
+/* 回答到达后，app.js 会给 .steps 加 .folded，把整段过程收进一行摘要 */
+.steps.folded{display:none}
+.steps-toggle{
+  align-self:flex-start;margin:2px 0 6px;padding:2px 0;border:none;background:none;cursor:pointer;
+  font-family:inherit;font-size:var(--fs-xs);color:var(--soft);
+}
+.steps-toggle:hover{color:var(--accent-2)}
+.step{
+  display:flex;gap:8px;align-items:flex-start;
+  padding:2px 0;font-size:var(--fs-xs);line-height:var(--lh-tight);
+  background:none;border:none;color:var(--soft);
+  animation:fade .2s ease both;
+}
+.step .tx{min-width:0;word-break:break-word}
+.step .tx p{margin:0}
+.step.ok{color:var(--soft)}
+.step.warn{color:var(--gold)}
+.step.bad{color:var(--red)}
+.step.run{color:var(--accent-2)}
+.step .ic{flex:0 0 auto;width:7px;height:7px;margin-top:7px;border-radius:50%;display:inline-block}
+.ic.dot-ok{background:#C9CDD3}
+.ic.dot-warn{background:var(--gold)}
+.ic.dot-bad{background:var(--red)}
+.ic.spinner{
+  width:9px;height:9px;margin-top:6px;background:transparent;
+  border:2px solid var(--accent-line);border-top-color:var(--accent);animation:sp .7s linear infinite;
+}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* 场景卡：不要框，做成一行"已解析出的场景"摘要（值用等宽字） */
+.plan{padding:2px 0 4px;background:none;border:none;animation:fade .2s ease both}
+.plan .pt{font-size:var(--fs-xs);color:var(--soft);margin-bottom:5px}
+.plan .pgrid{display:flex;flex-wrap:wrap;gap:4px 16px}
+.plan .pk{font-size:var(--fs-xs);color:var(--soft);display:inline}
+.plan .pv{font-family:var(--mono);font-size:var(--fs-small);font-weight:600;color:var(--ink);margin-left:5px}
+
+/* ---------------- 数字闸门小结：一行灰字 + 状态点，不画框 ---------------- */
+.gate{display:flex;gap:8px;align-items:flex-start;padding:3px 0;font-size:var(--fs-xs);color:var(--soft);animation:fade .2s ease both}
+.gate.good,.gate.warnbox{background:none;border:none}
+.gate.warnbox{color:var(--gold)}
+.gate .ic{flex:0 0 auto;width:7px;height:7px;margin-top:6px;border-radius:50%}
+.gate .anchors{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:3px}
+.gate .anchor{font-size:var(--fs-xs);color:var(--soft);border:none;background:none;padding:0}
+.gate .anchor i{font-style:normal;color:var(--soft)}
+.gate .anchor b{font-family:var(--mono);color:var(--muted);margin:0 4px}
+.gate .anchor em{font-style:normal;color:var(--soft);font-family:var(--mono);font-size:var(--fs-lead)}
+
+/* ---------------- 明细折叠 / 出处折叠 ----------------
+   这是 N2 的落点：正文不许出现文件名/路径/行号，**出处全部住在这里**。
+   外观上刻意做成"一行灰字 + 展开箭头"，不是卡片。 */
+.details{display:flex;flex-direction:column;gap:2px}
+details.det{border:none;border-top:1px solid var(--line);border-radius:0;background:none;overflow:visible}
+details.det>summary{
+  cursor:pointer;padding:8px 0;font-size:var(--fs-xs);font-weight:500;color:var(--soft);
+  list-style:none;display:flex;align-items:center;gap:7px;
+}
+details.det>summary::-webkit-details-marker{display:none}
+details.det>summary::before{content:"▸";color:var(--soft);font-size:var(--fs-lead)}
+details.det[open]>summary::before{content:"▾"}
+details.det>summary:hover{color:var(--accent-2)}
+.det-body{padding:2px 0 12px}
+.det-body h4{font-size:var(--fs-xs);font-weight:700;margin:12px 0 6px;color:var(--muted)}
+
+/* 出处列表（来自 answer.citations） */
+.cites{display:flex;flex-direction:column;gap:8px}
+.cites .cr{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:var(--fs-xs);line-height:var(--lh-tight)}
+.cites .cw{color:var(--muted);flex:0 0 auto;max-width:46%}
+.cites .cf{font-family:var(--mono);font-size:var(--fs-lead);color:var(--soft);word-break:break-all}
+.cites .snip{font-size:var(--fs-xs);color:var(--soft);line-height:var(--lh-inline)}
+
+/* 表格：只保留**横向分隔线**（不画外框），像文档里的表 */
+.tbl-scroll{overflow-x:auto;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:var(--fs-xs)}
+th{text-align:left;background:none;color:var(--soft);padding:7px 10px 7px 0;border-bottom:1px solid var(--line-2);white-space:nowrap;font-weight:600}
+td{padding:7px 10px 7px 0;border-bottom:1px solid var(--line);color:var(--muted);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr.best td{background:none;font-weight:600;color:var(--ink)}
+td.num{font-family:var(--mono);white-space:nowrap;text-align:right}
+.cite{font-size:var(--fs-xs);color:var(--soft);font-family:var(--mono);word-break:break-all}
+
+/* 提示块：只留左边一道细线（单边，不算框） */
+.note{border-left:2px solid var(--line-2);background:none;padding:2px 0 2px 12px;font-size:var(--fs-xs);color:var(--muted);margin:9px 0;line-height:var(--lh-tight)}
+.note.info{border-left-color:var(--accent-line)}
+.note.ok{border-left-color:var(--accent)}
+.note.bad{border-left-color:var(--red)}
+.note b{color:var(--ink)}
+
+pre,.md-code{
+  margin:8px 0 0;padding:12px;border-radius:10px;background:var(--bg-2);
+  border:none;overflow:auto;max-height:340px;
+  font-family:var(--mono);font-size:var(--fs-xs);line-height:var(--lh-tight);color:#333;white-space:pre-wrap;word-break:break-word;
+}
+pre.tight{max-height:240px}
+
+.hit{padding:9px 0;margin-bottom:2px;background:none;border-bottom:1px solid var(--line)}
+.hit:last-child{border-bottom:none}
+.hit .hd{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+.hit .txt{font-size:var(--fs-xs);color:var(--muted);white-space:pre-wrap;line-height:var(--lh-tight)}
+
+/* 离线出口条：一行提示 + 两个按钮，不画框 */
+.offerbar{
+  display:flex;gap:var(--pad-block);align-items:center;flex-wrap:wrap;
+  padding:6px 0;font-size:var(--fs-xs);color:var(--gold);
+}
+
+/* ---------------- Markdown 正文 ---------------- */
+.md{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--ink)}
+.md>*:first-child{margin-top:0}
+.md>*:last-child{margin-bottom:0}
+/* R1：三级标题原来写死 15.5px（= .brand 的字号），与 --fs-body 只差 1px、肉眼分不出来。
+   归到 --fs-body 让层级真的分得开：h3 > h4 > h5。 */
+.md h3{font-size:var(--fs-body);font-weight:700;margin:18px 0 8px;color:var(--ink);letter-spacing:.1px}
+.md h4{font-size:var(--fs-small);font-weight:700;margin:15px 0 7px;color:var(--ink)}
+.md h5,.md h6{font-size:var(--fs-small);font-weight:700;margin:12px 0 6px;color:var(--muted)}
+.md p{margin:9px 0}
+.md ul,.md ol{margin:9px 0;padding-left:20px}
+.md li{margin:4px 0}
+.md blockquote{
+  margin:var(--pad-block) 0;padding:1px 0 1px 12px;border-left:2px solid var(--accent-line);
+  background:none;color:var(--muted);font-size:var(--fs-small);line-height:var(--lh-body);
+}
+.md blockquote p{margin:5px 0}
+.md hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+.md strong{font-weight:700}
+.md a{text-decoration:underline;text-decoration-color:var(--accent-line)}
+/* Markdown 表格：不画外框，只用横向分隔线 */
+.md-table{overflow-x:auto;margin:12px 0}
+.md-table table{font-size:var(--fs-xs)}
+.md-code{white-space:pre}
+
+/* ---------------- 输入区（固定在底部） ---------------- */
+.composer{
+  flex:0 0 auto;border-top:1px solid var(--line);
+  background:var(--page);
+  padding:var(--pad-block) 0 8px;
+}
+.composer-inner{display:flex;gap:9px;align-items:flex-end}
+.composer textarea{
+  min-height:48px;max-height:180px;resize:none;line-height:var(--lh-inline);
+  border-radius:14px;padding:12px;background:var(--bg-2);border-color:transparent;
+}
+.composer textarea:focus{background:var(--page);border-color:var(--accent)}
+.composer-foot{display:flex;gap:8px;align-items:center;margin-top:6px}
+
+/* 直接填参数面板（离线通道，默认收起）——这是**功能面板**，
+   它不是对话流的一部分，保留一个浅底会把"干净"破坏掉，所以只用上下分隔线。 */
+.formpanel{
+  display:none;flex:0 0 auto;border:none;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  border-radius:0;background:var(--bg-2);padding:14px;margin-bottom:var(--pad-block);
+}
+.formpanel.show{display:block;animation:fade .2s ease both}
+.fp-head{display:flex;align-items:center;margin-bottom:var(--pad-block);font-size:var(--fs-small)}
+
+/* ---------------- 下一步 chips（N4） ----------------
+   回答下面那一排建议。用户要"像豆包那样" —— 但**内容**只能来自白名单
+   （见 dialog.mjs:NEXT_ACTIONS），样式上就是几个浅底圆角小按钮，不加边框。 */
+.next{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.next .nx{
+  padding:7px 12px;border-radius:999px;border:none;cursor:pointer;
+  background:var(--accent-soft);color:var(--accent-2);
+  font-family:inherit;font-size:var(--fs-xs);font-weight:600;line-height:var(--lh-inline);
+  transition:background .13s ease,color .13s ease;
+}
+.next .nx:hover{background:var(--accent);color:#fff}
+.next .nx:disabled{opacity:.5;cursor:not-allowed}
+.next .nh{font-size:var(--fs-lead);color:var(--soft);align-self:center;width:100%;margin-top:2px}
+
+/* ---------------- 页脚 ----------------
+   R1 减法：从 2 行压成 1 行。被砍掉的「数值冻结线 2026-10-16 / 由 Agent 原型生成」
+   搬到了每条回答的「出处」折叠块脚注（见 app.js:CITE_FOOTNOTE）。 */
+footer{padding:8px 22px 12px;color:var(--soft);font-size:var(--fs-xs);line-height:var(--lh-inline);max-width:1680px;margin:0 auto;width:100%}
+/* 🔴 R4（2026-10-13）：矮屏只隐藏页脚即可，**不再需要另一条魔法数**。
+   原先是 `footer{display:none}` + `.layout{height:calc(100vh - var(--topbar-h) - 100px)}` ——
+   同一件事写了两遍、两处都写死（130 / 100），改一处忘一处就错位。
+   现在 .layout 是 flex:1，页脚一 display:none 它自动吃掉腾出来的高度。 */
+@media (max-height:760px){ footer{display:none} }
+/* 可靠结果先显示；措辞整理完成后仍保留原文与边界供回查。 */
+.result-status{font-size:13px;color:var(--muted,#64748b);margin:8px 0}
+.result-source{margin:12px 0;color:var(--muted,#64748b)}
+.result-source summary{cursor:pointer;font-size:13px}
+.result-source .md{margin-top:12px;color:var(--ink,#18354d)}
+
+/* Embedded view shares the main site heading. */
+body.embedded .topbar .brand{display:none}
+body.embedded .stance-wrap{padding-top:12px}

@@ -1,0 +1,7 @@
+.env
+.env.*
+.user_api_key
+*credentials*
+*deploy_token*
+node_modules/
+*.log

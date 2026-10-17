@@ -1,0 +1,12 @@
+{
+  "name": "waste-heat-agent-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": "24.x"},
+  "scripts": {
+    "start": "node cloud-entry.mjs",
+    "test": "node --test --test-isolation=none cloud_test.mjs",
+    "verify": "node verify-package.mjs"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "snapshot": "2026-10-17",
+  "definition": "Original bytes; cloud wrapper only. No numeric edits.",
+  "files": {
+    "dialog.mjs": "4344383b6e5217a05e3073c2e16f5594e3002a3646acc3deee161d553f5e62f8",
+    "engine_bridge.mjs": "0fda57fcf8d494e09fd3ae1d01ae2b6cf70b721209ca53f2869d7fdff0f7a82a",
+    "llm.mjs": "a36aad2a4fe3456f938ef6f851a16ca3ebfa87d71cea440fce65f059c28927cf",
+    "prior.mjs": "98f14c2c3e175560a2c0d7ca128e333eabdcfc60f3bc39d8f062d6ad76bceed9",
+    "rag.mjs": "12ccd1faf4125742e3dde1c9ad25aa59573abe2dd05c85152edaa163cc8a052c",
+    "session.mjs": "4b8dbc3376fa95bdabacf021d3320db37fec0a2128ea7b39259ae58941f850c2",
+    "runtime/content/boundaries.json": "6b1f473c286c389394096a0d6f2c51676fa8ad24739f88f65f05f6b5da97b70c",
+    "runtime/docs/对外数字台账.md": "834aea8772a4b13e0afd53cd5d2fc6a7c39f3cd29e594f28f2bcaa4463923410",
+    "runtime/src/engine/chiller_grid.js": "44d4249dd1f54278d75fe1ba941b6cc50aae3a5717083924430712a16f794835",
+    "runtime/src/engine/decision_core.js": "1584aa5733a02b56ad482b9682ebf20f4390bd58a0a8acd14752e6e3c9e68ce2",
+    "runtime/src/engine/expander_map.js": "a0e0732c675a4e88142378c99ebf7d508c87a72a7a2f0fc0f58c2d4cfc44edc9",
+    "runtime/src/engine/fluids.js": "07493a0b743d0f80d2b3ff23b1cfc8ee1729bc255aa37fcbbe96ab5236c5ca2e",
+    "runtime/src/engine/fluid_matrix.js": "9064145b16e4cb2f1f2569e31069d68f0312d5d2c63bc513f1252b66aa6bb182",
+    "runtime/src/engine/io.js": "97564efb9be25de0570a9b46c6a8d254ac91e147de732b5d211ea8e684c7b843",
+    "runtime/src/engine/orc_cond_table.js": "4526842f2797b5ead8b5e10a338b34f99e914ffd23f3638c5e2acc153099a025",
+    "runtime/src/engine/parasitic.js": "7e12303984942e702e19d333589c829193968069a57b9c801282c1a2165897e4",
+    "runtime/src/engine/parasitic_table.js": "6a56cf7450659b0ec0633e9225f463212e29d84c1fe54f1c1f70a92420e3a63b",
+    "runtime/src/engine/turbine_size.js": "5f4da5395243d9970bf7db3d229d63fa3a3a832c458b9c88952cb945d09cfd3b",
+    "runtime/src/engine/two_stage_table.js": "ac3789df022e026052ba7ac9c85029d49cf446bf67504a15686a4229fca40467",
+    "runtime/src/legacy/eff_table_override.js": "3bb4d8afff40d3ad5ada7b6aec33e09bf57d3fd502a4674cc05cf8ba40041936",
+    "runtime/src/legacy/hfdata.js": "713a7f1b78c50d7fa8957f0c26c02e6ced918d4456244cdb0d6fa582bc67c6ac",
+    "runtime/src/util.js": "3051545920cf3e02646c64d0dc64c527175d7a8d2b22c9f934b19d2ba9836267",
+    "kb/知识手册_正文_v4_20261013_快照.md": "935bce4040eaaeb3564022e6f903fc455ba7711a93423a91ab61bc01b3f1b44a"
+  }
+}

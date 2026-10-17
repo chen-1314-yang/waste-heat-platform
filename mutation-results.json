@@ -1,0 +1,22 @@
+[
+  {
+    "name": "origin gate",
+    "caught": true,
+    "exit": 1
+  },
+  {
+    "name": "global cost limit",
+    "caught": true,
+    "exit": 1
+  },
+  {
+    "name": "session authorization",
+    "caught": true,
+    "exit": 1
+  },
+  {
+    "name": "length validation",
+    "caught": true,
+    "exit": 1
+  }
+]

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工业余热回收 · 对话式决策 Agent</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<script>if(new URLSearchParams(location.search).get("embed")==="1")document.body.classList.add("embedded");</script>
+
+<!-- ===================== 顶栏（只有一条下分隔线） ===================== -->
+<!-- R1 减法：删掉副标题 .tagline（不承载任何信息），三个状态 pill 合并成一个「状态」。
+     ⚠ #pill-engine / #pill-llm / #pill-kb 三个节点**保留**（renderHealth() 仍逐个更新，
+       它们是 `hidden` 的实况节点）—— 只在**出错**时被降到可见的提示条里展开。
+       全绿时顶栏只有一个小圆点 + 一个字，不再每轮念一遍三个"正常"。 -->
+<div class="topbar">
+  <span class="brand">工业余热回收 · 智能决策平台</span>
+  <span class="spacer"></span>
+  <span class="pill" id="pill-status">检测中…</span>
+  <span id="pill-detail" hidden>
+    <span class="pill" id="pill-engine">引擎：检测中…</span>
+    <span class="pill" id="pill-llm">AI：检测中…</span>
+    <span class="pill" id="pill-kb">知识库：—</span>
+  </span>
+  <button class="btn ghost small" id="btn-new">新对话</button>
+</div>
+
+<!-- ===================== 立场条（必须保留原话） =====================
+     R1 减法：「AI 只做入口，数字全来自引擎。」**原话一字不改**（这是用户明确要保留的）。
+     下面那 3 行小字压成 2 行，被砍掉的细节（runDecision / 台账原样引用 / 跨轮不复用）
+     搬进每条回答下面的「出处」折叠块脚注 —— 同一件事不再在页面上说两遍。 -->
+<div class="stance-wrap">
+  <div class="stance">
+    <span class="icon">🔒</span>
+    <div>
+      <div class="big" id="stance-big">AI 只做入口，数字全来自引擎。</div>
+      <div class="sub">
+        大模型只干两件事：<b>把你的口语翻译成引擎入参</b>、<b>把引擎已算好的结论换个说法</b>。
+        所有对外数字原样引用自决策内核，本轮追问的数字本轮重算、不复用上一轮。
+      </div>
+    </div>
+  </div>
+
+  <!-- 断网 / 未配 key 时的降级条：明确说"AI 入口不可用"，并给离线出口 -->
+  <div class="degrade" id="degrade">
+    <span class="icon">⚠</span>
+    <div>
+      <b id="degrade-title">AI 入口当前不可用（无网络）</b>
+      <div class="small muted" id="degrade-detail">请使用离线网页版演示，结论完全一致。</div>
+    </div>
+    <span class="spacer"></span>
+    <a class="btn ghost" id="offline-link" href="/offline-demo" target="_blank" rel="noopener">打开离线单文件演示页 →</a>
+    <button class="btn ghost small" id="btn-form-offline">直接填参数（不经过 AI）</button>
+    <button class="btn ghost small" id="btn-recheck">重新检测</button>
+  </div>
+</div>
+
+<!-- ===================== 主体 ===================== -->
+<main class="layout">
+
+  <!-- ---------- 侧栏（用户要求保留这两张卡；这一版去掉了卡片边框，只留标题与留白） ---------- -->
+  <aside class="side">
+    <div class="card">
+      <h3><span class="no">?</span>你可以这样问</h3>
+      <div class="chips col">
+        <button class="chip ex">介绍一下这个项目</button>
+        <button class="chip ex">我这儿有个 320℃ 的窑炉烟气，流量 1.2 万标方每小时，想发电</button>
+        <button class="chip ex">水泥窑尾废气 350 度，60 kg/s，要发电</button>
+        <button class="chip ex">80℃ 的高炉冲渣水，20 kg/s，想供冷</button>
+        <button class="chip ex">150℃ 锅炉排烟 40 kg/s 用来烘干</button>
+        <button class="chip ex">900℃ 的高炉渣显热，20 kg/s，产蒸汽</button>
+      </div>
+      <div class="note info small" style="margin-top:10px">
+        <b>追问怎么问：</b>先说一个完整工况，然后接着说「<b>那如果流量减半呢？</b>」——
+        它会接着上一轮算。
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="no">§</span>知识库（问答的检索源）</h3>
+      <div id="kb-list" class="small muted">加载中…</div>
+      <div class="chips col" style="margin-top:9px">
+        <button class="chip exq">年运行小时默认多少</button>
+        <button class="chip exq">温度包络是多少</button>
+        <button class="chip exq">9517 和 7733 是怎么回事</button>
+        <button class="chip exq">证书扰动多少项、几项会翻转</button>
+      </div>
+      <div class="note small" style="margin-top:9px">
+        标「不得引用」的段落<b>已从检索中整体剔除</b>，问到它时只说"依纪律不得引用"。
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="no">⚙</span>不依赖 AI 的入口</h3>
+      <p class="small muted" style="margin:0 0 8px">
+        这条路<b>完全不经过大模型</b>，断网也能演示。它证明"数字来自引擎"与 AI 无关。
+      </p>
+      <button class="btn ghost small" id="btn-form">打开「直接填参数」面板</button>
+    </div>
+  </aside>
+
+  <!-- ---------- 对话区 ---------- -->
+  <section class="chatpane">
+    <div class="chat" id="chat" aria-live="polite">
+      <!-- 消息容器：用户气泡在右（.msg.me），助手气泡在左（.msg.ai） -->
+    </div>
+
+    <!-- 直接填参数面板（离线可用，默认收起） -->
+    <div class="formpanel" id="formpanel">
+      <div class="fp-head">
+        <b>直接填参数 → 引擎（不经过 AI）</b>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="btn-form-close">收起</button>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>需求</label><select id="f-demand"></select></div>
+        <div class="field"><label>载体</label><select id="f-medium"></select></div>
+        <div class="field"><label>连续性</label><select id="f-cont"><option>连续</option><option>间歇</option></select></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>热源温度 ℃</label><input type="number" id="f-t" value="320"></div>
+        <div class="field"><label>流量 kg/s</label><input type="number" id="f-m" value="50" step="0.1"></div>
+        <div class="field"><label>流量 t/h</label><input type="number" id="f-th" placeholder="填了就用 t/h（÷3.6）"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>换热端差 K</label><input type="number" id="f-dt" value="10"></div>
+        <div class="field"><label>年运行小时</label><input type="number" id="f-h" value="6500"></div>
+        <div class="field"><label>或选工况库 19 行</label><select id="f-cond"></select></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="btn-runform">用引擎算</button>
+        <span class="small soft">这条路不调用 DeepSeek，因此断网时仍然可用。</span>
+      </div>
+    </div>
+
+    <!-- 输入区（固定在底部） -->
+    <div class="composer" id="composer">
+      <div class="composer-inner">
+        <textarea id="input" rows="1" placeholder="随便说点什么 —— 说「你好」，或直接给一句工况"></textarea>
+        <button class="btn" id="btn-send">发送</button>
+        <button class="btn ghost" id="btn-stop" style="display:none">停止</button>
+      </div>
+      <div class="composer-foot">
+        <span class="small soft" id="composer-hint">Enter 发送 · Shift+Enter 换行 · 闲聊直接聊，工况句会去调引擎，问口径会去查知识库并给出处</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- R1 减法：页脚从 2 行压成 1 行。被砍掉的「数值冻结线 2026-10-16 / 由 Agent 原型生成」
+     搬进每条回答下面的「出处」折叠块脚注 —— 那里本来就是"口径与出处"的落点，
+     不必在每一轮对话都占一行。
+     R2 只做减法：这一行**去掉了「与《边界与口径》」**—— 那句话一字不差地已经写在
+     同一条回答的「出处」脚注里（app.js:CITE_FOOTNOTE），而页脚是每一屏都在念的。
+     页脚只留"数字以哪本台账为准"这一句对外承诺。 -->
+<footer>
+  <div>数字口径以项目《对外数字台账》为准。</div>
+</footer>
+
+<script src="./md.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

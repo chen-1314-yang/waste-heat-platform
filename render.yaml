@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: waste-heat-agent
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm run verify
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: 24.8.0
+      - key: PARENT_ORIGIN
+        value: https://chen-1314-yang.github.io
+      - key: DAILY_TURN_LIMIT
+        value: 120
+      - key: DEEPSEEK_API_KEY
+        sync: false
