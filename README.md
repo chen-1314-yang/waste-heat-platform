@@ -44,3 +44,9 @@
 主站发布必须经原 tools/deploy.py 全部门禁，不跳过测试。回滚接入：撤回这批显示层提交，按原发布流程恢复 gh-pages；关闭 Render 服务不会影响原 GitHub Pages 计算页。冻结的 runtime 文件不在本批修改范围内。
 
 官方说明：https://render.com/docs/free · https://render.com/docs/blueprint-spec · https://render.com/docs/web-services
+
+## 2026-10-17 Streamlit 旧入口内嵌修复
+
+现有入口 `https://waste-heat-demo.streamlit.app` 外层套着 GitHub Pages 主站，主站再加载本 Agent。CSP frame-ancestors 会检查每一层祖先，故白名单同时包含 self、GitHub 主站与上述确切的 Streamlit 入口。没有开放 *.streamlit.app 或任意来源；API 的 POST Origin 限制保持原样，嵌入许可不授予额外的 API 跨域许可。
+
+验证：cloud_test.mjs 的 Streamlit 链路测试先失败、修复后通过；删除外层许可的反向变异也确实失败。全部 8 项服务测试通过，23 份冻结文件校验通过。Render 生效须部署本次 agent-service 提交（若自动部署关闭，手动 Deploy latest commit）。

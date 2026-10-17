@@ -38,6 +38,21 @@ test('会话由服务器随机创建；跨站/猜测/指定 id 请求在模型�
     const r=await c.post('/api/chat/stream',{text:'hi',sessionId:a}); assert.equal(r.status,200); await r.text(); assert.equal(calls,1);
   } finally {await close(c);}
 });
+test('Streamlit→GitHub→Agent 的所有祖先均获准嵌入，API 来源限制仍独立生效',async()=>{
+  const streamlit='https://waste-heat-demo.streamlit.app';
+  const c=await start({runTurn:minimalTurn});
+  try {
+    const r=await c.get('/?embed=1');assert.equal(r.status,200);
+    const policy=r.headers.get('content-security-policy');
+    const allowed=policy.split(';')[0].trim().split(/\s+/).slice(1);
+    assert(allowed.includes(origin),'inner GitHub ancestor must be permitted');
+    assert(allowed.includes(streamlit),'outer Streamlit ancestor must be permitted');
+    assert.deepEqual(new Set(allowed),new Set(["'self'",origin,streamlit]),'only known ancestors allowed');
+    assert.equal((await c.post('/api/session',{}, {Origin:streamlit})).status,403,'embedding permission must not grant cross-origin API permission');
+    assert.equal((await c.post('/api/session',{}, {Origin:'https://other.streamlit.app'})).status,403);
+    const s=await sid(c);await(await c.post('/api/chat/stream',{text:'hello',sessionId:s})).text();
+  } finally {await close(c);}
+});
 test('请求约束真正拦截超长文本、超大/错误 JSON，并移除自检强制意图',async()=>{
   let params=[]; const c=await start({runTurn:async function*(p){params.push(p);yield* minimalTurn(p);}});
   try {

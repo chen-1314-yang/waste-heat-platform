@@ -31,10 +31,13 @@ async function readBody(req) {
 const staticFiles={'/':['index.html','text/html'],'/index.html':['index.html','text/html'],'/app.js':['app.js','text/javascript'],'/style.css':['style.css','text/css'],'/md.js':['md.js','text/javascript']};
 
 export function createCloudServer({parentOrigin=process.env.PARENT_ORIGIN||'https://chen-1314-yang.github.io',runTurn=Dlg.runTurn,dailyTurns=Number(process.env.DAILY_TURN_LIMIT||120),newSessionLimit=30,sessionTurns=30,maxActive=2,turnTimeoutMs=90000}={}) {
+  // CSP checks every ancestor: the existing Streamlit entry embeds the GitHub main site.
+  // This exact outer page is allowed to frame the UI; POST origin checks below remain separate.
+  const frameAncestors=[...new Set(["'self'",parentOrigin,'https://waste-heat-demo.streamlit.app'])].join(' ');
   const issued=new Map();
   let day='',dailyCount=0,minute=0,sessionCount=0,active=0;
   return http.createServer(async(req,res)=>{
-    res.setHeader('Content-Security-Policy',"frame-ancestors 'self' "+parentOrigin);
+    res.setHeader('Content-Security-Policy','frame-ancestors '+frameAncestors);
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Referrer-Policy','no-referrer');
     const p=new URL(req.url,'http://localhost').pathname;
