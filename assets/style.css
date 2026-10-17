@@ -189,3 +189,13 @@ th{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap}
 /* 老站用 section.tab 切页；新站导航占用了 .tab，故改名为 .legacy-section */
 .legacy-tool .legacy-section{display:none}
 .legacy-tool .legacy-section.active{display:block;animation:fadeUp .35s ease both}
+
+#agent-host{max-width:none;padding:14px 20px 24px}
+.agent-toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px;max-width:1600px;margin:0 auto 12px}
+.agent-toolbar strong{font-size:18px;margin-right:18px;color:var(--ink)}
+.agent-status{font-size:13px;color:var(--muted)}
+.agent-reconnect{background:white;border:1px solid var(--line);border-radius:8px;padding:7px 14px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.agent-frame-wrap{max-width:1600px;margin:auto;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+.agent-frame-wrap:empty{border:none}
+.agent-frame-wrap iframe{display:block;width:100%;height:calc(100vh - 178px);min-height:480px;border:0;background:white}
+@media(max-width:700px){#agent-host{padding:10px 8px}.agent-toolbar{align-items:flex-start}.agent-status{display:block;margin-top:4px}.agent-frame-wrap iframe{height:calc(100vh - 210px);min-height:580px}}

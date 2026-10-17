@@ -5409,6 +5409,63 @@ window.VIEW_AFTER.learning = function () {
   L.init().then(renderAll);
 };
 
+/* Persistent host: switching tabs hides this section without recreating its iframe. */
+(function () {
+  var host, frame, endpoint, waiting;
+  function allowedUrl(raw) {
+    if (!raw) return '';
+    try {
+      var u = new URL(raw);
+      var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) &&
+                  /^(localhost|127\.0\.0\.1)$/.test(u.hostname);
+      if (u.username || u.password || u.hash || u.search) return '';
+      if (!(u.protocol === 'https:' && /\.onrender\.com$/.test(u.hostname)) &&
+          !(local && u.protocol === 'http:')) return '';
+      return u.origin + u.pathname.replace(/\/$/, '') + '/';
+    } catch (_) { return ''; }
+  }
+  function status(text) { host.querySelector('.agent-status').textContent = text; }
+  function load() {
+    if (frame) frame.remove();
+    clearTimeout(waiting);
+    frame = document.createElement('iframe');
+    frame.title = '工业余热智能助手';
+    frame.referrerPolicy = 'no-referrer';
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+    frame.src = endpoint + '?embed=1';
+    host.querySelector('.agent-frame-wrap').appendChild(frame);
+    status('正在连接助手。免费试运行服务休眠后，首次启动可能需要约一分钟。');
+    waiting = setTimeout(function () {
+      status('助手尚未就绪，可稍候点击“重新连接”。也可切回“计算”继续使用网页工具。');
+    }, 75000);
+  }
+  window.showAgent = function (content) {
+    host = document.getElementById('agent-host');
+    host.hidden = false;
+    if (host.dataset.initialized) return;
+    endpoint = allowedUrl(content.site.agentUrl);
+    host.dataset.initialized = 'true';
+    host.innerHTML = '<div class="agent-toolbar"><div><strong>智能助手</strong>' +
+      '<span class="agent-status" role="status"></span></div>' +
+      '<button class="agent-reconnect" type="button">重新连接</button></div>' +
+      '<div class="agent-frame-wrap"></div>';
+    if (!endpoint) {
+      status('线上助手正在配置。当前可继续使用“计算”和其他网页工具。');
+      host.querySelector('.agent-reconnect').hidden = true;
+      return;
+    }
+    host.querySelector('.agent-reconnect').onclick = load;
+    window.addEventListener('message', function (event) {
+      if (!frame || event.source !== frame.contentWindow || event.origin !== new URL(endpoint).origin) return;
+      if (event.data && event.data.type === 'waste-heat-agent-ready') {
+        clearTimeout(waiting);
+        status(event.data.ai ? '已连接 · 可以描述工况或继续追问' : '已连接 · AI 暂不可用，可直接填参数计算');
+      }
+    });
+    load();
+  };
+}());
+
 window.VIEWS = window.VIEWS || {};
 
 function renderTabs() {
@@ -5426,10 +5483,16 @@ window.renderTab = function (tabId) {
   var content = window.__CONTENT__;
   var viewHost = document.getElementById('view');
   var legacyHost = document.getElementById('legacy-host');
+  var agentHost = document.getElementById('agent-host');
+  agentHost.hidden = true;
   var useLegacy = typeof window.isLegacyTool === 'function' &&
                   window.isLegacyTool(tabId);
 
-  if (useLegacy) {
+  if (tabId === 'agent') {
+    viewHost.hidden = true;
+    legacyHost.hidden = true;
+    window.showAgent(content);
+  } else if (useLegacy) {
     // 老站搬过来的六个功能页签：由桥接层接管
     viewHost.innerHTML = '';
     viewHost.hidden = true;
